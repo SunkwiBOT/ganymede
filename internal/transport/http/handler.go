@@ -191,11 +191,11 @@ func (h *Handler) mapRoutes() {
 	videosH := echo.WrapHandler(http.StripPrefix(env.VideosDir, http.FileServer(http.Dir(env.VideosDir))))
 	tempH := echo.WrapHandler(http.StripPrefix(env.TempDir, http.FileServer(http.Dir(env.TempDir))))
 
-	h.Server.GET(env.VideosDir+"/*", videosH)
-	h.Server.HEAD(env.VideosDir+"/*", videosH)
+	h.Server.GET(env.VideosDir+"/*", videosH, RequireLoginMiddleware)
+	h.Server.HEAD(env.VideosDir+"/*", videosH, RequireLoginMiddleware)
 
-	h.Server.GET(env.TempDir+"/*", tempH)
-	h.Server.HEAD(env.TempDir+"/*", tempH)
+	h.Server.GET(env.TempDir+"/*", tempH, RequireLoginMiddleware)
+	h.Server.HEAD(env.TempDir+"/*", tempH, RequireLoginMiddleware)
 
 	// RiverUI
 	h.Server.Any("/riverui/", echo.WrapHandler(h.RiverUIServer), AuthGuardMiddleware, AuthGetUserMiddleware, AuthUserRoleMiddleware(utils.EditorRole))
@@ -228,12 +228,12 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	// Channel
 	//
 	// Write/admin endpoints accept either a session cookie or an API
-	// key. GETs stay public.
+	// key. GETs stay public unless REQUIRE_LOGIN is enabled.
 	channelGroup := e.Group("/channel")
 	channelGroup.POST("", h.CreateChannel, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeChannelWrite))
-	channelGroup.GET("", h.GetChannels)
-	channelGroup.GET("/:id", h.GetChannel)
-	channelGroup.GET("/name/:name", h.GetChannelByName)
+	channelGroup.GET("", h.GetChannels, RequireLoginMiddleware)
+	channelGroup.GET("/:id", h.GetChannel, RequireLoginMiddleware)
+	channelGroup.GET("/name/:name", h.GetChannelByName, RequireLoginMiddleware)
 	channelGroup.PUT("/:id", h.UpdateChannel, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeChannelWrite))
 	channelGroup.DELETE("/:id", h.DeleteChannel, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.AdminRole, utils.ApiKeyScopeChannelAdmin))
 	channelGroup.POST("/:id/update-image", h.UpdateChannelImage, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeChannelWrite))
@@ -243,28 +243,28 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	// Write/admin endpoints (POST/PUT/DELETE for the VOD itself) accept
 	// either a session cookie or an API key — see issue #1070, where
 	// external scripts need to delete VODs after archiving them. Read
-	// endpoints stay unauthenticated as before.
+	// endpoints stay unauthenticated unless REQUIRE_LOGIN is enabled.
 	vodGroup := e.Group("/vod")
 	vodGroup.POST("", h.CreateVod, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeVodWrite))
-	vodGroup.GET("", h.GetVods)
-	vodGroup.GET("/:id", h.GetVod)
-	vodGroup.GET("/external_id/:external_id", h.GetVod)
-	vodGroup.GET("/search", h.SearchVods)
+	vodGroup.GET("", h.GetVods, RequireLoginMiddleware)
+	vodGroup.GET("/:id", h.GetVod, RequireLoginMiddleware)
+	vodGroup.GET("/external_id/:external_id", h.GetVod, RequireLoginMiddleware)
+	vodGroup.GET("/search", h.SearchVods, RequireLoginMiddleware)
 	vodGroup.PUT("/:id", h.UpdateVod, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeVodWrite))
 	vodGroup.DELETE("/:id", h.DeleteVod, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.AdminRole, utils.ApiKeyScopeVodAdmin))
-	vodGroup.GET("/:id/playlist", h.GetVodPlaylists)
-	vodGroup.GET("/:id/clips", h.GetVodClips)
-	vodGroup.GET("/paginate", h.GetVodsPagination)
-	vodGroup.GET("/:id/chat", h.GetVodChatComments)
-	vodGroup.GET("/:id/chat/seek", h.GetNumberOfVodChatCommentsFromTime)
-	vodGroup.GET("/:id/chat/userid", h.GetUserIdFromChat)
-	vodGroup.GET("/:id/chat/emotes", h.GetChatEmotes)
-	vodGroup.GET("/:id/chat/badges", h.GetChatBadges)
-	vodGroup.GET("/:id/chat/histogram", h.GetVodChatHistogram)
+	vodGroup.GET("/:id/playlist", h.GetVodPlaylists, RequireLoginMiddleware)
+	vodGroup.GET("/:id/clips", h.GetVodClips, RequireLoginMiddleware)
+	vodGroup.GET("/paginate", h.GetVodsPagination, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat", h.GetVodChatComments, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat/seek", h.GetNumberOfVodChatCommentsFromTime, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat/userid", h.GetUserIdFromChat, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat/emotes", h.GetChatEmotes, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat/badges", h.GetChatBadges, RequireLoginMiddleware)
+	vodGroup.GET("/:id/chat/histogram", h.GetVodChatHistogram, RequireLoginMiddleware)
 	vodGroup.POST("/:id/lock", h.LockVod, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeVodWrite))
 	vodGroup.POST("/:id/generate-static-thumbnail", h.GenerateStaticThumbnail, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeVodWrite))
 	vodGroup.POST("/:id/generate-sprite-thumbnails", h.GenerateSpriteThumbnails, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeVodWrite))
-	vodGroup.GET("/:id/thumbnails/vtt", h.GetVodSpriteThumbnails)
+	vodGroup.GET("/:id/thumbnails/vtt", h.GetVodSpriteThumbnails, RequireLoginMiddleware)
 	vodGroup.POST("/:id/ffprobe", h.GetFFprobe, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.ArchiverRole, utils.ApiKeyScopeVodWrite))
 
 	// Queue
@@ -287,8 +287,8 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 
 	// Twitch
 	twitchGroup := e.Group("/twitch")
-	twitchGroup.GET("/channel", h.GetTwitchChannel)
-	twitchGroup.GET("/video", h.GetTwitchVideo)
+	twitchGroup.GET("/channel", h.GetTwitchChannel, RequireLoginMiddleware)
+	twitchGroup.GET("/video", h.GetTwitchVideo, RequireLoginMiddleware)
 	// twitchGroup.GET("/gql/video", h.GQLGetTwitchVideo)
 	// twitchGroup.GET("/categories", h.GetTwitchCategories)
 
@@ -360,16 +360,17 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	playbackGroup.POST("/status", h.UpdateStatus, AuthGuardMiddleware, AuthGetUserMiddleware)
 	playbackGroup.DELETE("/:id", h.DeleteProgress, AuthGuardMiddleware, AuthGetUserMiddleware)
 	playbackGroup.GET("/last", h.GetLastPlaybacks, AuthGuardMiddleware, AuthGetUserMiddleware)
-	playbackGroup.POST("/start", h.StartPlayback)
+	playbackGroup.POST("/start", h.StartPlayback, RequireLoginMiddleware)
 
 	// Playlist
 	//
 	// All write endpoints accept either a session cookie or an API key.
 	// Issue #1070's second use case: scripts that auto-create or
-	// reorder playlists. GET endpoints stay unauthenticated.
+	// reorder playlists. GET endpoints stay unauthenticated unless
+	// REQUIRE_LOGIN is enabled.
 	playlistGroup := e.Group("/playlist")
-	playlistGroup.GET("/:id", h.GetPlaylist)
-	playlistGroup.GET("", h.GetPlaylists)
+	playlistGroup.GET("/:id", h.GetPlaylist, RequireLoginMiddleware)
+	playlistGroup.GET("", h.GetPlaylists, RequireLoginMiddleware)
 	playlistGroup.POST("", h.CreatePlaylist, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopePlaylistWrite))
 	playlistGroup.POST("/:id", h.AddVodToPlaylist, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopePlaylistWrite))
 	playlistGroup.DELETE("/:id/vod", h.DeleteVodFromPlaylist, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopePlaylistWrite))
@@ -399,22 +400,23 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 
 	// Chapter
 	chapterGroup := e.Group("/chapter")
-	chapterGroup.GET("/video/:videoId", h.GetVideoChapters)
-	chapterGroup.GET("/video/:videoId/webvtt", h.GetWebVTTChapters)
+	chapterGroup.GET("/video/:videoId", h.GetVideoChapters, RequireLoginMiddleware)
+	chapterGroup.GET("/video/:videoId/webvtt", h.GetWebVTTChapters, RequireLoginMiddleware)
 
 	// Category
 	categoryGroup := e.Group("/category")
-	categoryGroup.GET("", h.GetCategories)
+	categoryGroup.GET("", h.GetCategories, RequireLoginMiddleware)
 
 	// Blocked
 	//
-	// Public reads stay public. Write endpoints (block/unblock) accept
-	// API keys at blocked_video:write — Editor role for sessions.
+	// Public reads stay public unless REQUIRE_LOGIN is enabled. Write
+	// endpoints (block/unblock) accept API keys at blocked_video:write
+	// — Editor role for sessions.
 	blockedGroup := e.Group("/blocked-video")
-	blockedGroup.GET("", h.GetBlockedVideos)
+	blockedGroup.GET("", h.GetBlockedVideos, RequireLoginMiddleware)
 	blockedGroup.POST("/:id", h.CreateBlockedVideo, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeBlockedVideoWrite))
 	blockedGroup.DELETE("/:id", h.DeleteBlockedVideo, AuthAPIKeyOrSessionMiddleware, AuthGetUserMiddleware, RequireRoleOrScope(utils.EditorRole, utils.ApiKeyScopeBlockedVideoWrite))
-	blockedGroup.GET("/:id", h.IsVideoBlocked)
+	blockedGroup.GET("/:id", h.IsVideoBlocked, RequireLoginMiddleware)
 }
 
 func (h *Handler) Serve(ctx context.Context) error {

@@ -50,7 +50,10 @@ type EnvConfig struct {
 	OAuthRedirectURL  string `env:"OAUTH_REDIRECT_URL, default="`
 
 	// frontend
-	CDN_URL string `env:"CDN_URL, default="` // Populate if using an external host for the static files (Nginx, S3, etc). By default Ganymede will serve the VIDEOS_DIR directory.
+	// Populate if using an external host for the static files (Nginx, S3, etc). By default Ganymede will serve the VIDEOS_DIR directory.
+	CDN_URL string `env:"CDN_URL, default="`
+	// Require a valid session for public video/data routes.
+	RequireLogin bool `env:"REQUIRE_LOGIN, default=false"`
 }
 
 const fileSuffix = "_FILE"

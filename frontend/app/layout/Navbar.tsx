@@ -181,7 +181,9 @@ export function Navbar() {
     <header className={classes.header}>
       <div className={classes.inner}>
         <Group gap={5}>
-          <Image src="/images/ganymede_logo.png" height={32} width={32} alt="Ganymede logo" />
+          <Link href="/" aria-label={t('links.home')} className={classes.logoLink}>
+            <Image src="/images/ganymede_logo.png" height={32} width={32} alt="Ganymede logo" />
+          </Link>
           <Group visibleFrom="md">{mainLinks}</Group>
         </Group>
         <Group gap={5} visibleFrom="md">

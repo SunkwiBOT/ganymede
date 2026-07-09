@@ -150,6 +150,7 @@ type FetchVideoOptions = {
   with_channel: boolean;
   with_muted_segments: boolean;
   with_chapters: boolean;
+  enabled?: boolean;
 };
 
 const fetchVideo = async (
@@ -282,11 +283,12 @@ const useFetchVideosFilter = (params: FetchVideosFilterOptions) => {
 };
 
 const useFetchVideo = (params: FetchVideoOptions) => {
-  const { id, with_channel, with_chapters, with_muted_segments } = params;
+  const { id, with_channel, with_chapters, with_muted_segments, enabled = true } = params;
   return useQuery({
     queryKey: ["video", id, with_channel, with_chapters, with_muted_segments],
     queryFn: () =>
       fetchVideo(id, with_channel, with_chapters, with_muted_segments),
+    enabled,
     refetchInterval: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -590,10 +592,11 @@ const getVideoClips = async (id: string): Promise<Video[]> => {
   return response.data.data;
 };
 
-const useGetVideoClips = (id: string) => {
+const useGetVideoClips = (id: string, enabled: boolean = true) => {
   return useQuery({
     queryKey: ["video_clips", id],
     queryFn: () => getVideoClips(id),
+    enabled,
     refetchInterval: false,
     refetchOnMount: false,
     refetchOnWindowFocus: false,

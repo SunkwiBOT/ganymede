@@ -157,6 +157,23 @@ func AuthGuardMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// RequireLoginMiddleware protects routes that are public on open
+// deployments, but should require a session when REQUIRE_LOGIN is enabled.
+func RequireLoginMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if !config.GetEnvConfig().RequireLogin {
+			return next(c)
+		}
+
+		userID, ok := sessionManager.Get(c.Request().Context(), "user_id").(string)
+		if !ok || userID == "" {
+			return ErrorInvalidAccessTokenResponse(c)
+		}
+
+		return next(c)
+	}
+}
+
 // AuthGetUserMiddleware is a middleware that fetches the user from the database and sets it in the request context. AuthGuardMiddleware is expected to run before this to set the user ID from a session token.
 //
 // When auth_method == "api_key" the middleware injects the singleton

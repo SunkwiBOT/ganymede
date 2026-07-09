@@ -29,6 +29,7 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
   const t = useTranslations("VideoPage");
+  const loginRequired = env('NEXT_PUBLIC_REQUIRE_LOGIN') == "true" && !isLoggedIn;
 
   const videoTheaterMode = useSettingsStore((state) => state.videoTheaterMode);
   const hideChat = useSettingsStore((state) => state.hideChat);
@@ -36,23 +37,17 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
   const chatOnLeft = useSettingsStore((state) => state.chatOnLeft);
   const { fullscreen } = useFullscreenDocument();
 
-  const { data, isPending, isError } = useFetchVideo({ id, with_channel: true, with_chapters: true, with_muted_segments: true })
+  const { data, isPending, isError } = useFetchVideo({ id, with_channel: true, with_chapters: true, with_muted_segments: true, enabled: !loginRequired })
 
   // need to fetch clips here to dynamically render the clips section
-  const { data: videoClips, isPending: videoClipsPending, isError: videoClipsError } = useGetVideoClips(id)
+  const { data: videoClips, isPending: videoClipsPending, isError: videoClipsError } = useGetVideoClips(id, !loginRequired)
 
   useEffect(() => {
     document.title = `${data?.title}`;
   }, [data?.title]);
 
-  // check if login is required
-  const isLoginRequired = () => {
-    if (
-      env('NEXT_PUBLIC_REQUIRE_LOGIN') == "true" && !isLoggedIn
-    ) {
-      return true
-    }
-    return false
+  if (loginRequired) {
+    return <VideoLoginRequired />
   }
 
   if (isPending) {
@@ -62,10 +57,6 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
     return <div>{t('error')}</div>
   }
 
-
-  if (isLoginRequired()) {
-    return <VideoLoginRequired video={data} />
-  }
 
   return (
     <div>
