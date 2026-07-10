@@ -36,6 +36,34 @@ func extractBearerToken(c echo.Context) string {
 	return strings.TrimSpace(strings.TrimPrefix(auth, prefix))
 }
 
+func authenticateAPIKeyRequest(c echo.Context) (bool, error) {
+	token := extractBearerToken(c)
+	cfg := config.Get()
+	if token == "" || cfg == nil || !cfg.ApiKeysEnabled || apiKeyService == nil {
+		return false, nil
+	}
+
+	id, scopes, err := authenticateAPIKey(c.Request().Context(), token)
+	if err != nil {
+		return true, err
+	}
+	c.Set("auth_method", authMethodAPIKey)
+	c.Set("api_key.id", id)
+	c.Set("api_key.scopes", scopes)
+	return true, nil
+}
+
+func authenticateSessionRequest(c echo.Context) bool {
+	userID, ok := sessionManager.Get(c.Request().Context(), "user_id").(string)
+	if !ok || userID == "" {
+		return false
+	}
+
+	c.Set("auth_method", authMethodLocal)
+	c.Set("user.id", userID)
+	return true
+}
+
 // AuthAPIKeyOrSessionMiddleware authenticates a request using either an
 // API key (Authorization: Bearer …) or a session cookie. API keys are
 // tried first; if no Bearer header is present, the request falls back to
@@ -54,27 +82,18 @@ func extractBearerToken(c echo.Context) string {
 // admins managing existing keys via the web UI.
 func AuthAPIKeyOrSessionMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		token := extractBearerToken(c)
-		cfg := config.Get()
-
-		if token != "" && cfg != nil && cfg.ApiKeysEnabled && apiKeyService != nil {
-			id, scopes, err := authenticateAPIKey(c.Request().Context(), token)
-			if err != nil {
-				return ErrorInvalidAccessTokenResponse(c)
-			}
-			c.Set("auth_method", authMethodAPIKey)
-			c.Set("api_key.id", id)
-			c.Set("api_key.scopes", scopes)
+		apiKeyAuthenticated, err := authenticateAPIKeyRequest(c)
+		if err != nil {
+			return ErrorInvalidAccessTokenResponse(c)
+		}
+		if apiKeyAuthenticated {
 			return next(c)
 		}
 
 		// Fall back to the existing session-based check.
-		userID, ok := sessionManager.Get(c.Request().Context(), "user_id").(string)
-		if !ok {
+		if !authenticateSessionRequest(c) {
 			return ErrorInvalidAccessTokenResponse(c)
 		}
-		c.Set("auth_method", authMethodLocal)
-		c.Set("user.id", userID)
 		return next(c)
 	}
 }
@@ -141,17 +160,13 @@ func touchAsync(id uuid.UUID) {
 	}()
 }
 
-// AuthGuardMiddleware is a middleware that enforces authentication. If the request does not contain a vaild session a 403 error is returned.
+// AuthGuardMiddleware enforces session authentication.
 func AuthGuardMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 
-		userID, ok := sessionManager.Get(c.Request().Context(), "user_id").(string)
-		if !ok {
+		if !authenticateSessionRequest(c) {
 			return ErrorInvalidAccessTokenResponse(c)
 		}
-
-		c.Set("auth_method", "local")
-		c.Set("user.id", userID)
 
 		return next(c)
 	}
@@ -165,12 +180,71 @@ func RequireLoginMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return next(c)
 		}
 
-		userID, ok := sessionManager.Get(c.Request().Context(), "user_id").(string)
-		if !ok || userID == "" {
+		if !authenticateSessionRequest(c) {
 			return ErrorInvalidAccessTokenResponse(c)
 		}
 
 		return next(c)
+	}
+}
+
+// PublicUnlessRequireLogin protects read routes that are public on open
+// deployments. When REQUIRE_LOGIN is enabled they accept either a logged-in
+// session or an API key with the requested read scope.
+func PublicUnlessRequireLogin(scope utils.ApiKeyScope) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if !config.GetEnvConfig().RequireLogin {
+				return next(c)
+			}
+
+			apiKeyAuthenticated, err := authenticateAPIKeyRequest(c)
+			if err != nil {
+				return ErrorInvalidAccessTokenResponse(c)
+			}
+			if apiKeyAuthenticated {
+				scopes, _ := c.Get("api_key.scopes").(utils.ApiKeyScopes)
+				if !scopes.Includes(scope) {
+					return ErrorUnauthorizedResponse(c)
+				}
+				return next(c)
+			}
+
+			if !authenticateSessionRequest(c) {
+				return ErrorInvalidAccessTokenResponse(c)
+			}
+			return next(c)
+		}
+	}
+}
+
+// SessionOrAPIKey protects routes that always require authentication and
+// authorization, accepting either a session with the required role or an API key
+// with the required scope.
+func SessionOrAPIKey(role utils.Role, scope utils.ApiKeyScope) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return AuthAPIKeyOrSessionMiddleware(
+			AuthGetUserMiddleware(
+				RequireRoleOrScope(role, scope)(next),
+			),
+		)
+	}
+}
+
+// SessionOnly protects routes that require a logged-in user but no specific
+// role check.
+func SessionOnly(next echo.HandlerFunc) echo.HandlerFunc {
+	return AuthGuardMiddleware(AuthGetUserMiddleware(next))
+}
+
+// SessionRole protects session-only routes with the existing role hierarchy.
+func SessionRole(role utils.Role) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return AuthGuardMiddleware(
+			AuthGetUserMiddleware(
+				AuthUserRoleMiddleware(role)(next),
+			),
+		)
 	}
 }
 

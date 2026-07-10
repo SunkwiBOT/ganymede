@@ -342,6 +342,60 @@ func TestApiKeyHTTP(t *testing.T) {
 			Status(http.StatusForbidden)
 	})
 
+	t.Run("PublicRequireLoginReadRouteAcceptsScopedAPIKey", func(t *testing.T) {
+		oldRequireLogin, hadRequireLogin := os.LookupEnv("REQUIRE_LOGIN")
+		require.NoError(t, os.Setenv("REQUIRE_LOGIN", "true"))
+		defer func() {
+			if hadRequireLogin {
+				require.NoError(t, os.Setenv("REQUIRE_LOGIN", oldRequireLogin))
+			} else {
+				require.NoError(t, os.Unsetenv("REQUIRE_LOGIN"))
+			}
+		}()
+
+		channelObj := e.POST("/admin/api-keys").
+			WithJSON(internalHttp.CreateApiKeyRequest{
+				Name:   "channel-reader-required-login",
+				Scopes: []string{"channel:read"},
+			}).
+			Expect().Status(http.StatusCreated).JSON().Object()
+		channelToken := channelObj.Path("$.data.secret").String().Raw()
+
+		vodObj := e.POST("/admin/api-keys").
+			WithJSON(internalHttp.CreateApiKeyRequest{
+				Name:   "vod-reader-no-channel",
+				Scopes: []string{"vod:read"},
+			}).
+			Expect().Status(http.StatusCreated).JSON().Object()
+		vodToken := vodObj.Path("$.data.secret").String().Raw()
+
+		bearer := bareHTTPClient(t)
+		bearer.GET("/channel").
+			Expect().
+			Status(http.StatusUnauthorized)
+		bearer.GET("/channel").
+			WithHeader("Authorization", "Bearer "+vodToken).
+			Expect().
+			Status(http.StatusForbidden)
+		bearer.GET("/channel").
+			WithHeader("Authorization", "Bearer "+channelToken).
+			Expect().
+			Status(http.StatusOK)
+
+		bearer.GET("/vod/pagination").
+			WithQuery("limit", 1).
+			WithQuery("offset", 0).
+			WithHeader("Authorization", "Bearer "+channelToken).
+			Expect().
+			Status(http.StatusForbidden)
+		bearer.GET("/vod/pagination").
+			WithQuery("limit", 1).
+			WithQuery("offset", 0).
+			WithHeader("Authorization", "Bearer "+vodToken).
+			Expect().
+			Status(http.StatusOK)
+	})
+
 	t.Run("UpdateChangesScopesAndRevokesCachedAccess", func(t *testing.T) {
 		// Cache-flush proof requires a flexible-auth route (one whose
 		// middleware actually consults the bearer). GET /queue is the
