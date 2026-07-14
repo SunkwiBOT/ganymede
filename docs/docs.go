@@ -4550,7 +4550,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "twitch_token": {
-                            "description": "Twitch token for ad-free live streams or subscriber-only videos.",
+                            "description": "Optional OAuth token used for live stream playback requests. If the token belongs to an account subscribed to the channel, live streams can be downloaded without ads. VOD downloads do not use this token.",
                             "type": "string"
                         },
                         "video_convert": {

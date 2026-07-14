@@ -15,7 +15,7 @@ type Config struct {
 	VideoCheckInterval  int  `json:"video_check_interval_minutes"` // How often in minutes watched channels are checked for new videos.
 	RegistrationEnabled bool `json:"registration_enabled"`         // Enable registration.
 	Parameters          struct {
-		TwitchToken  string `json:"twitch_token"`  // Twitch token for ad-free live streams or subscriber-only videos.
+		TwitchToken  string `json:"twitch_token"`  // Optional OAuth token used for live stream playback requests. If the token belongs to an account subscribed to the channel, live streams can be downloaded without ads. VOD downloads do not use this token.
 		VideoConvert string `json:"video_convert"` // FFmpeg arguments for video conversion.
 		ChatRender   string `json:"chat_render"`   // TwitchDownloaderCLI arguments for chat rendering.
 	} `json:"parameters"`

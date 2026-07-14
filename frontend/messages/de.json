@@ -296,7 +296,7 @@
     "videoSettings": {
       "header": "Videoeinstellungen",
       "twitchTokenLabel": "Twitch-Token",
-      "twitchTokenDescription": "Gib dein Twitch-Token an, um werbefreie Live-Streams und VODs nur für Abonnenten herunterzuladen.",
+      "twitchTokenDescription": "Optionales OAuth-Token für Live-Stream-Playback-Anfragen. Wenn das Token zu einem Konto gehört, das den Kanal abonniert hat, können Live-Streams ohne Werbung heruntergeladen werden. VOD-Downloads verwenden dieses Token nicht.",
       "convertFFmpegArgsLabel": "Video-Konvertierungs-FFmpeg-Argumente",
       "convertFFmpegArgsDescription": "Benutzerdefinierte FFmpeg-Argumente, die bei der Konvertierung des Videos verwendet werden sollen. Dies wird sowohl für Live- als auch für VOD-Archivierungen verwendet.",
       "liveStreamTitle": "Live-Stream",
@@ -663,8 +663,6 @@
     "downloadHighlightsDescription": "Vergangene Highlights herunterladen",
     "downloadUploadsLabel": "Uploads herunterladen",
     "downloadUploadsDescription": "Vergangene Uploads herunterladen",
-    "downloadSubOnlyLabel": "Nur-Abonnenten-Videos herunterladen",
-    "downloadSubOnlyDescription": "Aktiviere dies nicht, wenn du kein Abonnent bist. Du musst ein Twitch-Token unter Admin > Einstellungen eingestellt haben, um Nur-Abonnenten-Videos herunterzuladen.",
     "channelClipsText": "Kanal-Clips",
     "channelClipsDescription": "Archiviere vergangene Kanal-Clips.",
     "channelClipsDescription1": "Diese Funktion dient dazu, die beliebtesten (Anzahl der Aufrufe) Clips der letzten 'Intervall'-Tage zu archivieren. Wenn du beispielsweise die Anzahl der Clips auf 5 und das Intervall auf 7 festlegst, werden die Top 5 Clips der letzten 7 Tage archiviert. Sie wird erst nach 7 Tagen wieder ausgeführt. Es werden keine Einschränkungen (Kategorien, Alter, Titel, Regex usw.) angewendet.",

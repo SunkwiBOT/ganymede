@@ -14,7 +14,6 @@ import (
 	"github.com/zibbp/ganymede/ent/livetitleregex"
 	"github.com/zibbp/ganymede/ent/vod"
 	"github.com/zibbp/ganymede/internal/archive"
-	"github.com/zibbp/ganymede/internal/config"
 	"github.com/zibbp/ganymede/internal/platform"
 	"github.com/zibbp/ganymede/internal/utils"
 )
@@ -181,20 +180,6 @@ func (s *Service) CheckVodWatchedChannels(ctx context.Context, logger zerolog.Lo
 				videoCategories = append(videoCategories, videoChapters...)
 				if platformVideo.Category != nil {
 					videoCategories = append(videoCategories, *platformVideo.Category)
-				}
-
-				// Check if video is sub only restricted
-				if video.Restriction != nil && *video.Restriction == string(platform.VideoRestrictionSubscriber) {
-					// Skip if sub only is disabled
-					if !watch.DownloadSubOnly {
-						logger.Info().Str("video_id", video.ID).Msgf("skipping subscriber-only video")
-						continue
-					}
-					// Skip if Twitch token is not set
-					if config.Get().Parameters.TwitchToken == "" {
-						logger.Info().Str("video_id", video.ID).Msg("skipping sub only video; Twitch token is not set")
-						continue
-					}
 				}
 
 				// Check category restrictions / blacklists

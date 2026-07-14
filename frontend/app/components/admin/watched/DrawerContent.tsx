@@ -358,13 +358,6 @@ const AdminWatchedChannelDrawerContent = ({ watchedChannel, mode, handleClose }:
               key={form.key('download_uploads')}
               {...form.getInputProps('download_uploads', { type: "checkbox" })}
             />
-            <Checkbox
-              mt={5}
-              label={t('downloadSubOnlyLabel')}
-              description={t('downloadSubOnlyDescription')}
-              key={form.key('download_sub_only')}
-              {...form.getInputProps('download_sub_only', { type: "checkbox" })}
-            />
           </Box>
         </div>
 

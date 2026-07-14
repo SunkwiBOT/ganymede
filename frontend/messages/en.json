@@ -296,7 +296,7 @@
     "videoSettings": {
       "header": "Video Settings",
       "twitchTokenLabel": "Twitch Token",
-      "twitchTokenDescription": "Supply your Twitch token for downloading ad-free live streams and subscriber-only VODs.",
+      "twitchTokenDescription": "Optional OAuth token used for live stream playback requests. If the token belongs to an account subscribed to the channel, live streams can be downloaded without ads. VOD downloads do not use this token.",
       "convertFFmpegArgsLabel": "Video Convert FFmpeg Arguments",
       "convertFFmpegArgsDescription": "Custom FFmpeg arguments to use when converting the video. This is used for both live and VOD archives.",
       "liveStreamTitle": "Live Stream",
@@ -663,8 +663,6 @@
     "downloadHighlightsDescription": "Download past highlights",
     "downloadUploadsLabel": "Download Uploads",
     "downloadUploadsDescription": "Download past uploads",
-    "downloadSubOnlyLabel": "Download Subscriber Only Videos",
-    "downloadSubOnlyDescription": "Do not check this if you are not a subscriber. Must have Twitch token set in Admin > Settings to download subscriber-only videos.",
     "channelClipsText": "Channel Clips",
     "channelClipsDescription": "Archive past channel clips.",
     "channelClipsDescription1": "This feature is meant to archive the most popular (view count) clips from the past 'interval' days. For example, if you set number of clips to 5 and interval to 7, the top 5 clips from the past 7 days will be archived. It will not run again until 7 days have passed. No restrictions (categories, age, title, regex, etc) are applied to this.",

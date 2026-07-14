@@ -5,8 +5,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	osExec "os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -22,8 +26,12 @@ import (
 )
 
 const (
-	sigintTimeout = 300 * time.Second
+	sigintTimeout                    = 300 * time.Second
+	maxTwitchVODMediaPlaylistSize    = 64 * 1024 * 1024
+	twitchVODFFmpegProtocolWhitelist = "file,http,https,tcp,tls,crypto"
 )
+
+var hlsURIAttributePattern = regexp.MustCompile(`URI="([^"]+)"`)
 
 func appendFFmpegLiveOutputStreamArgs(args []string, audioOnly bool) []string {
 	streamMap := "0"
@@ -37,6 +45,136 @@ func appendFFmpegLiveOutputStreamArgs(args []string, audioOnly bool) []string {
 		"-ignore_unknown",
 		"-c", "copy",
 	)
+}
+
+func selectTwitchVODPlaylist(masterPlaylist *hls.Multivariant, requestedQuality string) (string, string, bool, error) {
+	qualities := make([]string, 0, len(masterPlaylist.Variants))
+	qualitiesURI := make(map[string]string, len(masterPlaylist.Variants))
+	for _, variant := range masterPlaylist.Variants {
+		qualities = append(qualities, variant.Video)
+		qualitiesURI[variant.Video] = variant.URI
+	}
+
+	closestQuality := utils.SelectClosestQuality(requestedQuality, qualities)
+	switch closestQuality {
+	case "audio":
+		closestQuality = "audio_only"
+	case "source":
+		closestQuality = "chunked"
+	}
+
+	playlistURI, ok := qualitiesURI[closestQuality]
+	if !ok || playlistURI == "" {
+		return "", "", false, fmt.Errorf("selected Twitch VOD HLS quality %q has no playlist URI", closestQuality)
+	}
+
+	return closestQuality, playlistURI, closestQuality == "audio_only", nil
+}
+
+func materializeTwitchVODMediaPlaylist(ctx context.Context, playlistURI string) (string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, playlistURI, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create media playlist request: %w", err)
+	}
+	req.Header.Set("User-Agent", utils.ChromeUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch media playlist: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxTwitchVODMediaPlaylistSize+1))
+	if err != nil {
+		return "", fmt.Errorf("failed to read media playlist: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("received media playlist status code %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if len(body) > maxTwitchVODMediaPlaylistSize {
+		return "", fmt.Errorf("media playlist exceeds maximum size of %d bytes", maxTwitchVODMediaPlaylistSize)
+	}
+
+	rewritten, err := rewriteTwitchVODMediaPlaylist(string(body), playlistURI)
+	if err != nil {
+		return "", err
+	}
+
+	tmpFile, err := os.CreateTemp("", "ganymede-twitch-vod-*.m3u8")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary media playlist: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	keepFile := false
+	defer func() {
+		if !keepFile {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmpFile.WriteString(rewritten); err != nil {
+		_ = tmpFile.Close()
+		return "", fmt.Errorf("failed to write temporary media playlist: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close temporary media playlist: %w", err)
+	}
+
+	keepFile = true
+	return tmpPath, nil
+}
+
+func rewriteTwitchVODMediaPlaylist(playlistText string, playlistURI string) (string, error) {
+	baseURL, err := url.Parse(playlistURI)
+	if err != nil {
+		return "", fmt.Errorf("invalid media playlist URI: %w", err)
+	}
+
+	var b strings.Builder
+	lines := strings.SplitAfter(playlistText, "\n")
+	for _, line := range lines {
+		lineWithoutNewline := strings.TrimSuffix(line, "\n")
+		newline := line[len(lineWithoutNewline):]
+		lineWithoutCR := strings.TrimSuffix(lineWithoutNewline, "\r")
+		cr := lineWithoutNewline[len(lineWithoutCR):]
+		stripped := strings.TrimSpace(lineWithoutCR)
+
+		switch {
+		case stripped == "":
+			b.WriteString(line)
+		case strings.HasPrefix(stripped, "#"):
+			b.WriteString(rewriteHLSURIAttributes(lineWithoutCR, baseURL) + cr + newline)
+		default:
+			b.WriteString(resolveHLSURI(baseURL, stripped) + cr + newline)
+		}
+	}
+
+	output := b.String()
+	if output != "" && !strings.HasSuffix(output, "\n") {
+		output += "\n"
+	}
+	return output, nil
+}
+
+func rewriteHLSURIAttributes(line string, baseURL *url.URL) string {
+	return hlsURIAttributePattern.ReplaceAllStringFunc(line, func(match string) string {
+		parts := hlsURIAttributePattern.FindStringSubmatch(match)
+		if len(parts) != 2 {
+			return match
+		}
+		return `URI="` + resolveHLSURI(baseURL, parts[1]) + `"`
+	})
+}
+
+func resolveHLSURI(baseURL *url.URL, value string) string {
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return value
+	}
+	return baseURL.ResolveReference(parsed).String()
 }
 
 // DownloadTwitchVideo downloads a Twitch video.
@@ -67,30 +205,26 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 	tc := &platform.TwitchConnection{}
 	masterPlaylist, err := tc.GetVideoPlayback(ctx, video.ExtID)
 	if err != nil {
-		return fmt.Errorf("failed to get TwitchLink VOD HLS playlist: %w", err)
+		return fmt.Errorf("failed to get custom Twitch VOD HLS playlist: %w", err)
 	}
 	if len(masterPlaylist.Variants) == 0 {
-		return fmt.Errorf("TwitchLink VOD HLS playlist has no variants")
+		return fmt.Errorf("custom Twitch VOD HLS playlist has no variants")
 	}
 
-	qualities := make([]string, 0, len(masterPlaylist.Variants))
-	qualitiesURI := make(map[string]string, len(masterPlaylist.Variants))
-	for _, variant := range masterPlaylist.Variants {
-		qualities = append(qualities, variant.Video)
-		qualitiesURI[variant.Video] = variant.URI
+	closestQuality, playlistURI, audioOnly, err := selectTwitchVODPlaylist(masterPlaylist, video.Resolution)
+	if err != nil {
+		return err
 	}
-
-	closestQuality := utils.SelectClosestQuality(video.Resolution, qualities)
-	if closestQuality == "audio" {
-		closestQuality = "audio_only"
+	localPlaylistPath, err := materializeTwitchVODMediaPlaylist(ctx, playlistURI)
+	if err != nil {
+		return fmt.Errorf("failed to materialize Twitch VOD media playlist: %w", err)
 	}
+	defer func() {
+		if err := os.Remove(localPlaylistPath); err != nil && !os.IsNotExist(err) {
+			log.Debug().Err(err).Str("path", localPlaylistPath).Msg("failed to remove temporary Twitch VOD media playlist")
+		}
+	}()
 
-	playlistURI, ok := qualitiesURI[closestQuality]
-	if !ok || playlistURI == "" {
-		return fmt.Errorf("selected TwitchLink VOD HLS quality %q has no playlist URI", closestQuality)
-	}
-
-	audioOnly := closestQuality == "audio_only"
 	streamMap := "0"
 	if audioOnly {
 		streamMap = "0:a"
@@ -102,7 +236,8 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 		"-loglevel", "warning",
 		"-stats",
 		"-fflags", "+genpts",
-		"-i", playlistURI,
+		"-protocol_whitelist", twitchVODFFmpegProtocolWhitelist,
+		"-i", localPlaylistPath,
 		"-map", streamMap,
 		"-dn",
 		"-ignore_unknown",
@@ -116,7 +251,7 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 	cmd := osExec.Command("ffmpeg", ffmpegArgs...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
-	log.Info().Str("requested_quality", video.Resolution).Str("selected_quality", closestQuality).Msg("running TwitchLink HLS VOD download")
+	log.Info().Str("requested_quality", video.Resolution).Str("selected_quality", closestQuality).Msg("running custom Twitch HLS VOD download")
 
 	cmd.Stderr = file
 	cmd.Stdout = file
@@ -155,8 +290,8 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 		return ctx.Err()
 	case err := <-done:
 		if err != nil {
-			log.Error().Err(err).Msg("error running TwitchLink HLS VOD download")
-			return fmt.Errorf("error running TwitchLink HLS VOD download: %w", err)
+			log.Error().Err(err).Msg("error running custom Twitch HLS VOD download")
+			return fmt.Errorf("error running custom Twitch HLS VOD download: %w", err)
 		}
 	}
 

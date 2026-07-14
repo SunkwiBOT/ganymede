@@ -36,6 +36,7 @@ type TwitchGQLPlaybackAccessToken struct {
 type TwitchGQLVideoResponse struct {
 	Data       TwitchGQLVideoData `json:"data"`
 	Extensions TwitchExtensions   `json:"extensions"`
+	Errors     []TwitchGQLError   `json:"errors"`
 }
 
 type TwitchGQLVideoData struct {
@@ -49,6 +50,11 @@ type TwitchGQLVideo struct {
 	Title               string                    `json:"title"`
 	CreatedAt           string                    `json:"createdAt"`
 	SeekPreviewsURL     string                    `json:"seekPreviewsURL"` // storyboard thumbnails manifest
+	Owner               TwitchGQLOwner            `json:"owner"`
+}
+
+type TwitchGQLOwner struct {
+	Login string `json:"login"`
 }
 
 type TwitchGQLGame struct {
@@ -152,19 +158,31 @@ type TwitchGQLNodeVideo struct {
 	Typename      string `json:"__typename"`
 }
 
-// GQLRequest sends a generic GQL request and returns the response.
-func twitchGQLRequest(body string) ([]byte, error) {
-	return twitchGQLRequestWithAuth(body, true)
+var TwitchGQLUrl = "https://gql.twitch.tv/gql"
+
+func normalizeTwitchOAuthToken(token string) string {
+	token = strings.TrimSpace(token)
+	for _, prefix := range []string{"oauth:", "OAuth ", "Bearer ", "bearer "} {
+		if strings.HasPrefix(token, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(token, prefix))
+		}
+	}
+	return token
 }
 
-// twitchGQLRequestWithAuth sends a generic GQL request and optionally includes the configured Twitch OAuth token.
-func twitchGQLRequestWithAuth(body string, includeAuth bool) ([]byte, error) {
+// GQLRequest sends a generic GQL request and returns the response.
+func twitchGQLRequest(body string) ([]byte, error) {
+	return twitchGQLRequestWithAuth(body, "")
+}
+
+// twitchGQLRequestWithAuth sends a generic GQL request and optionally includes a Twitch OAuth token.
+func twitchGQLRequestWithAuth(body string, twitchToken string) ([]byte, error) {
 	client := &http.Client{}
 	const maxAttempts = 3
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		req, err := http.NewRequest("POST", "https://gql.twitch.tv/gql", strings.NewReader(body))
+		req, err := http.NewRequest("POST", TwitchGQLUrl, strings.NewReader(body))
 		if err != nil {
 			return nil, fmt.Errorf("error creating request: %w", err)
 		}
@@ -177,8 +195,8 @@ func twitchGQLRequestWithAuth(body string, includeAuth bool) ([]byte, error) {
 		req.Header.Set("Sec-Fetch-Site", "same-site")
 		req.Header.Set("User-Agent", utils.ChromeUserAgent)
 
-		twitchToken := config.Get().Parameters.TwitchToken
-		if includeAuth && twitchToken != "" {
+		twitchToken = normalizeTwitchOAuthToken(twitchToken)
+		if twitchToken != "" {
 			req.Header.Set("Authorization", fmt.Sprintf("OAuth %s", twitchToken))
 		}
 
@@ -247,16 +265,19 @@ func (c *TwitchConnection) TwitchGQLGetMutedSegments(id string) ([]TwitchGQLMute
 }
 
 func (c *TwitchConnection) TwitchGQLGetVideo(id string) (*TwitchGQLVideo, error) {
-	body := fmt.Sprintf(`{"query": "query{video(id:\"%s\"){broadcastType,resourceRestriction{id,type},game{id,name},title,createdAt,seekPreviewsURL}}"}`, id)
+	body := fmt.Sprintf(`{"query": "query{video(id:\"%s\"){broadcastType,resourceRestriction{id,type},game{id,name},title,createdAt,seekPreviewsURL,owner{login}}}"}`, id)
 	respBytes, err := twitchGQLRequest(body)
 	if err != nil {
-		return nil, fmt.Errorf("error getting video muted segments: %w", err)
+		return nil, fmt.Errorf("error getting video metadata: %w", err)
 	}
 
 	var resp TwitchGQLVideoResponse
 	err = json.Unmarshal(respBytes, &resp)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshalling response: %w", err)
+	}
+	if len(resp.Errors) > 0 {
+		return nil, fmt.Errorf("gql video metadata error: %s", resp.Errors[0].Message)
 	}
 
 	return &resp.Data.Video, nil
@@ -295,7 +316,7 @@ func (c *TwitchConnection) TwitchGQLGetPlaybackAccessToken(channel string) (*Twi
 
 	twitchToken := config.Get().Parameters.TwitchToken
 	if twitchToken != "" {
-		respBytes, err := twitchGQLRequestWithAuth(body, true)
+		respBytes, err := twitchGQLRequestWithAuth(body, twitchToken)
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to get playback access token with Twitch OAuth token, retrying without token")
 		} else {
@@ -307,50 +328,9 @@ func (c *TwitchConnection) TwitchGQLGetPlaybackAccessToken(channel string) (*Twi
 		}
 	}
 
-	respBytes, err := twitchGQLRequestWithAuth(body, false)
+	respBytes, err := twitchGQLRequestWithAuth(body, "")
 	if err != nil {
 		return nil, fmt.Errorf("error getting playback access token without oauth token: %w", err)
-	}
-
-	token, err := parsePlaybackAccessTokenResponse(respBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
-}
-
-// TwitchGQLGetVideoPlaybackAccessToken retrieves the playback access token for a Twitch VOD.
-func (c *TwitchConnection) TwitchGQLGetVideoPlaybackAccessToken(videoID string) (*TwitchGQLPlaybackAccessToken, error) {
-	body := fmt.Sprintf(`{
-		"operationName": "PlaybackAccessToken",
-		"variables": {
-			"isLive": false,
-			"login": "",
-			"isVod": true,
-			"vodID": "%s",
-			"playerType": "embed"
-		},
-		"query": "query PlaybackAccessToken($isLive: Boolean!, $login: String!, $isVod: Boolean!, $vodID: ID!, $playerType: String!) {\nstreamPlaybackAccessToken(channelName: $login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {\nvalue\nsignature\n}\nvideoPlaybackAccessToken(id: $vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {\nvalue\nsignature\n}\n}"
-	}`, videoID)
-
-	twitchToken := config.Get().Parameters.TwitchToken
-	if twitchToken != "" {
-		respBytes, err := twitchGQLRequestWithAuth(body, true)
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to get VOD playback access token with Twitch OAuth token, retrying without token")
-		} else {
-			token, parseErr := parsePlaybackAccessTokenResponse(respBytes)
-			if parseErr == nil {
-				return token, nil
-			}
-			log.Warn().Err(parseErr).Msg("configured Twitch OAuth token appears invalid for VOD playback access, retrying without token")
-		}
-	}
-
-	respBytes, err := twitchGQLRequestWithAuth(body, false)
-	if err != nil {
-		return nil, fmt.Errorf("error getting VOD playback access token without oauth token: %w", err)
 	}
 
 	token, err := parsePlaybackAccessTokenResponse(respBytes)

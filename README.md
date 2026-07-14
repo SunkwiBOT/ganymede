@@ -174,7 +174,6 @@ View the [Makefile](/Makefile) for more commands.
 ## Acknowledgements
 
 - [TwitchDownloader](https://github.com/lay295/TwitchDownloader)
-- [TwitchLink](https://github.com/devhotteok/TwitchLink)
 
 ## License
 
