@@ -18,7 +18,6 @@ type Config struct {
 		TwitchToken  string `json:"twitch_token"`  // Twitch token for ad-free live streams or subscriber-only videos.
 		VideoConvert string `json:"video_convert"` // FFmpeg arguments for video conversion.
 		ChatRender   string `json:"chat_render"`   // TwitchDownloaderCLI arguments for chat rendering.
-		YtDlpVideo   string `json:"yt_dlp_video"`  // yt-dlp arguments for video downloads.
 	} `json:"parameters"`
 	Archive struct {
 		SaveAsHls                bool `json:"save_as_hls"`                // Save as HLS rather than MP4.
@@ -198,7 +197,6 @@ func (c *Config) SetDefaults() {
 	c.Parameters.TwitchToken = ""
 	c.Parameters.VideoConvert = "-c:v copy -c:a copy"
 	c.Parameters.ChatRender = "-h 1440 -w 340 --framerate 30 --font Inter --font-size 13"
-	c.Parameters.YtDlpVideo = ""
 
 	c.Archive.SaveAsHls = false
 	c.Archive.GenerateSpriteThumbnails = true

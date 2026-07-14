@@ -66,3 +66,10 @@
   overflow-y: auto;
   max-height: 100%;
 }
+
+.twitchChatEmbed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}

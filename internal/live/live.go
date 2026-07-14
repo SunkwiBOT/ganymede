@@ -495,6 +495,36 @@ OUTER:
 				_, err := s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(false).SetLastLive(time.Now()).Save(ctx)
 				if err != nil {
 					log.Error().Err(err).Msg("error updating live watched channel")
+					continue OUTER
+				}
+				if s.NotificationService != nil {
+					var vod *ent.Vod
+					var q *ent.Queue
+					vod, err = s.Store.Client.Vod.Query().
+						Where(
+							entVod.TypeEQ(utils.Live),
+							entVod.HasChannelWith(channel.ID(lwc.Edges.Channel.ID)),
+						).
+						WithQueue().
+						Order(ent.Desc(entVod.FieldCreatedAt)).
+						First(ctx)
+					if err != nil {
+						if !ent.IsNotFound(err) {
+							log.Error().Err(err).Msg("error getting latest live vod for live-ended notification")
+						}
+					} else {
+						q = vod.Edges.Queue
+					}
+
+					notifCtx := context.WithoutCancel(ctx)
+					go func(channelItem *ent.Channel, vodItem *ent.Vod, queueItem *ent.Queue) {
+						defer func() {
+							if r := recover(); r != nil {
+								log.Error().Interface("panic", r).Msg("panic in SendLiveEnded notification")
+							}
+						}()
+						s.NotificationService.SendLiveEnded(notifCtx, channelItem, vodItem, queueItem)
+					}(lwc.Edges.Channel, vod, q)
 				}
 			}
 		}

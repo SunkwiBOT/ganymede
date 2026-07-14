@@ -29,7 +29,9 @@ const ProfilePage = () => {
     showChatTimestamps,
     setShowChatTimestamps,
     autoplayVideo,
-    setAutoplayVideo
+    setAutoplayVideo,
+    hideContinueWatching,
+    setHideContinueWatching
   } = useSettingsStore();
 
   const toggleSmoothScroll = () => {
@@ -54,6 +56,10 @@ const ProfilePage = () => {
 
   const toggleAutoplayVideo = () => {
     setAutoplayVideo(!autoplayVideo);
+  }
+
+  const toggleHideContinueWatching = () => {
+    setHideContinueWatching(!hideContinueWatching);
   }
 
   useEffect(() => {
@@ -120,6 +126,13 @@ const ProfilePage = () => {
                 description={t('settings.autoplayVideoDescription')}
                 checked={autoplayVideo}
                 onChange={toggleAutoplayVideo}
+                my={5}
+              />
+              <Checkbox
+                label={t('settings.hideContinueWatching')}
+                description={t('settings.hideContinueWatchingDescription')}
+                checked={hideContinueWatching}
+                onChange={toggleHideContinueWatching}
                 my={5}
               />
             </Box>

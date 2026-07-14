@@ -6,6 +6,7 @@
 }
 .titleBar {
   display: flex;
+  align-items: center;
   position: absolute;
   margin: 0;
   top: 50%;
@@ -14,10 +15,14 @@
   padding-left: 10px;
   padding-right: 10px;
 }
+.titleBarTitle {
+  flex: 0 1 auto;
+  min-width: 0;
+}
 .titleBarRight {
   margin-left: auto;
-  float: right;
   display: flex;
+  flex: 0 0 auto;
 }
 .titleBarBadge {
   display: flex;

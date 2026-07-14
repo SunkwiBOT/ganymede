@@ -903,6 +903,48 @@ func (c *TwitchConnection) GetStream(ctx context.Context, channelName string) (*
 	return masterPlaylist, nil
 }
 
+// GetVideoPlayback fetches the m3u8 playlist for a Twitch VOD.
+func (c *TwitchConnection) GetVideoPlayback(ctx context.Context, videoID string) (*hls.Multivariant, error) {
+	token, err := c.TwitchGQLGetVideoPlaybackAccessToken(videoID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get VOD playback access token: %v", err)
+	}
+
+	values := url.Values{}
+	values.Set("allow_source", "true")
+	values.Set("allow_audio_only", "true")
+	values.Set("sig", token.Signature)
+	values.Set("token", token.Value)
+
+	m3u8URL := fmt.Sprintf("https://usher.ttvnw.net/vod/%s.m3u8?%s", videoID, values.Encode())
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", m3u8URL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create VOD playlist request: %v", err)
+	}
+	req.Header.Set("User-Agent", utils.ChromeUserAgent)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch VOD m3u8 playlist: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("received unexpected VOD playlist status code: %d", resp.StatusCode)
+	}
+
+	masterPlaylist, err := hls.DecodeMultivariant(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding VOD m3u8 response body: %v", err)
+	}
+
+	return masterPlaylist, nil
+}
+
 // GetStreams fetches live streams from Twitch sorted by viewership. It supports pagination and limits the number of streams returned.
 func (c *TwitchConnection) GetStreams(ctx context.Context, limit int) ([]LiveStreamInfo, error) {
 	params := url.Values{

@@ -1,5 +1,4 @@
 ARG TWITCHDOWNLOADER_VERSION="1.56.4"
-ARG YT_DLP_VERSION="2026.02.04"
 
 #
 # API Build
@@ -17,32 +16,9 @@ COPY . .
 RUN make build_server build_worker
 
 #
-# Build yt-dlp
-#
-FROM python:3.14-bookworm AS build-yt-dlp
-ARG YT_DLP_VERSION
-
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git build-essential libffi-dev libssl-dev python3-dev zip pandoc \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install requests --break-system-packages
-# Clone yt-dlp repository
-RUN git clone --depth 1 --branch ${YT_DLP_VERSION} https://github.com/yt-dlp/yt-dlp.git /app/yt-dlp
-# Copy patch for Twitch Ganymede 
-#COPY ganymede_twitch_yt_dlp_git.patch /tmp/ganymede_twitch_yt_dlp_git.patch
-WORKDIR /app/yt-dlp
-#RUN git apply /tmp/ganymede_twitch_yt_dlp_git.patch
-# Build
-RUN make
-
-#
 # API Tools
 #
 FROM debian:bookworm-slim AS tools
-
-ARG YT_DLP_VERSION
 
 WORKDIR /tmp
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -61,9 +37,6 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
     curl -L $TWITCHDOWNLOADER_URL -o twitchdownloader.zip && \
     unzip twitchdownloader.zip && \
     rm twitchdownloader.zip
-
-# Install yt-dlp
-COPY --from=build-yt-dlp /app/yt-dlp/yt-dlp /usr/local/bin/yt-dlp
 
 #
 # Frontend base
@@ -116,9 +89,6 @@ RUN chmod 644 /usr/share/fonts/* && chmod -R a+rX /usr/share/fonts
 COPY --from=tools /tmp/TwitchDownloaderCLI /usr/local/bin/
 RUN chmod +x /usr/local/bin/TwitchDownloaderCLI
 
-# Copy and install yt-dlp
-COPY --from=tools /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
-
 # Production stage
 FROM debian:bookworm-slim
 
@@ -153,9 +123,6 @@ RUN node --version && npm --version
 
 # Setup user
 RUN useradd -u 911 -d /data abc && usermod -a -G users abc
-
-# Install yt-dlp
-COPY --from=build-yt-dlp /app/yt-dlp/yt-dlp /usr/local/bin/yt-dlp
 
 # Setup fonts
 RUN chmod 644 /usr/share/fonts/* && chmod -R a+rX /usr/share/fonts

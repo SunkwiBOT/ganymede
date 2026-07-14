@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	osExec "os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,7 +16,6 @@ import (
 	"github.com/zibbp/ganymede/ent"
 	"github.com/zibbp/ganymede/internal/config"
 	"github.com/zibbp/ganymede/internal/errors"
-	"github.com/zibbp/ganymede/internal/exec/ytdlp"
 	"github.com/zibbp/ganymede/internal/hls"
 	"github.com/zibbp/ganymede/internal/platform"
 	"github.com/zibbp/ganymede/internal/utils"
@@ -66,84 +64,65 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 	}()
 	log.Debug().Str("video_id", video.ID.String()).Msgf("logging output to %s", logFilePath)
 
-	// Create the Twitch URL based on video type
-	url := utils.CreateTwitchURL(video.ExtID, video.Type, video.Edges.Channel.Name)
-
-	// Create yt-dlp service
-	ytDlpCookies := []ytdlp.YtDlpCookie{}
-	if config.Get().Parameters.TwitchToken != "" {
-		ytDlpCookies = append(ytDlpCookies, ytdlp.YtDlpCookie{
-			Domain: ".twitch.tv",
-			Name:   "auth-token",
-			Value:  config.Get().Parameters.TwitchToken,
-		})
-	}
-	ytdlpSvc := ytdlp.NewYtDlpService(ytdlp.YtDlpOptions{Cookies: ytDlpCookies})
-
-	// Select the closest quality for the video
-	qualities, err := ytdlpSvc.GetVideoQualities(ctx, video)
+	tc := &platform.TwitchConnection{}
+	masterPlaylist, err := tc.GetVideoPlayback(ctx, video.ExtID)
 	if err != nil {
-		return fmt.Errorf("error getting video quality options: %w", err)
+		return fmt.Errorf("failed to get TwitchLink VOD HLS playlist: %w", err)
+	}
+	if len(masterPlaylist.Variants) == 0 {
+		return fmt.Errorf("TwitchLink VOD HLS playlist has no variants")
+	}
+
+	qualities := make([]string, 0, len(masterPlaylist.Variants))
+	qualitiesURI := make(map[string]string, len(masterPlaylist.Variants))
+	for _, variant := range masterPlaylist.Variants {
+		qualities = append(qualities, variant.Video)
+		qualitiesURI[variant.Video] = variant.URI
 	}
 
 	closestQuality := utils.SelectClosestQuality(video.Resolution, qualities)
-	log.Info().Msgf("selected closest quality %s", closestQuality)
-
-	// Create yt-dlp quality string
-	qualityString := ytdlpSvc.CreateQualityOption(closestQuality)
-
-	// Build output path
-	// yt-dlp will sometimes download two separate files for audio and video
-	// so we need to remove the extension and let yt-dlp add the extension
-	tmpVideoDownloadExt := filepath.Ext(video.TmpVideoDownloadPath)
-	tmpVideoDownloadPathNoExt := strings.TrimSuffix(video.TmpVideoDownloadPath, tmpVideoDownloadExt)
-
-	// Get user arguments from config
-	configYtDlpArgs := config.Get().Parameters.YtDlpVideo
-	configYtDlpArgsArr := strings.Split(configYtDlpArgs, ",")
-
-	var cmdArgs []string
-	cmdArgs = append(cmdArgs,
-		"-f", qualityString,
-		url,
-		"-o", fmt.Sprintf("%s.%%(ext)s", tmpVideoDownloadPathNoExt),
-		"--merge-output-format", "mp4", "--no-part",
-		"--no-warnings", "--progress", "--newline", "--no-check-certificate",
-	)
-
-	// Sanitize config args before appending
-	for _, arg := range configYtDlpArgsArr {
-		if strings.TrimSpace(arg) != "" {
-			cmdArgs = append(cmdArgs, arg)
-		}
+	if closestQuality == "audio" {
+		closestQuality = "audio_only"
 	}
 
-	// Create yt-dlp command
-	cmd, cookieFile, err := ytdlpSvc.CreateCommand(ctx, cmdArgs, true)
-	defer func() {
-		if cookieFile != nil {
-			if err := cookieFile.Close(); err != nil {
-				log.Debug().Err(err).Msg("failed to close cookies file")
-			}
-			if err := os.Remove(cookieFile.Name()); err != nil {
-				log.Debug().Err(err).Msg("failed to remove cookies file")
-			}
-		}
-	}()
-	if err != nil {
-		return fmt.Errorf("error creating yt-dlp command: %w", err)
+	playlistURI, ok := qualitiesURI[closestQuality]
+	if !ok || playlistURI == "" {
+		return fmt.Errorf("selected TwitchLink VOD HLS quality %q has no playlist URI", closestQuality)
 	}
 
-	log.Debug().Str("video_id", video.ID.String()).Str("cmd", strings.Join(cmd.Args, " ")).Msgf("running yt-dlp")
+	audioOnly := closestQuality == "audio_only"
+	streamMap := "0"
+	if audioOnly {
+		streamMap = "0:a"
+	}
+
+	ffmpegArgs := []string{
+		"-y",
+		"-hide_banner",
+		"-loglevel", "warning",
+		"-stats",
+		"-fflags", "+genpts",
+		"-i", playlistURI,
+		"-map", streamMap,
+		"-dn",
+		"-ignore_unknown",
+		"-c", "copy",
+		"-f", "mp4",
+		"-bsf:a", "aac_adtstoasc",
+		"-movflags", "+faststart",
+		video.TmpVideoDownloadPath,
+	}
+
+	cmd := osExec.Command("ffmpeg", ffmpegArgs...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	log.Info().Str("requested_quality", video.Resolution).Str("selected_quality", closestQuality).Msg("running TwitchLink HLS VOD download")
 
 	cmd.Stderr = file
 	cmd.Stdout = file
 
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true, // Set the process group ID to allow killing child processes
-	}
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("error starting yt-dlp: %w", err)
+		return fmt.Errorf("error starting ffmpeg: %w", err)
 	}
 
 	done := make(chan error)
@@ -154,20 +133,30 @@ func DownloadTwitchVideo(ctx context.Context, video ent.Vod) error {
 	// Wait for the command to finish or context to be cancelled
 	select {
 	case <-ctx.Done():
-		// Context was cancelled, kill the process
-		if err := cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to kill yt-dlp process: %v", err)
+		if cmd.Process != nil {
+			if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGINT); err != nil {
+				log.Error().Err(err).Msg("failed to send SIGINT to ffmpeg process")
+			}
 		}
-		<-done // Wait for copying to finish
+		select {
+		case <-done:
+		case <-time.After(sigintTimeout):
+			if cmd.Process != nil {
+				log.Warn().Msg("ffmpeg process did not exit after SIGINT, sending SIGKILL")
+				if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+					log.Error().Err(err).Msg("failed to send SIGKILL to ffmpeg process")
+				}
+			}
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+			}
+		}
 		return ctx.Err()
 	case err := <-done:
-		// Command finished normally
 		if err != nil {
-			if exitError, ok := err.(*osExec.ExitError); ok {
-				log.Error().Err(err).Str("exitCode", strconv.Itoa(exitError.ExitCode())).Str("exit_error", exitError.Error()).Msg("error running yt-dlp")
-				return fmt.Errorf("error running yt-dlp")
-			}
-			return fmt.Errorf("error running yt-dlp: %w", err)
+			log.Error().Err(err).Msg("error running TwitchLink HLS VOD download")
+			return fmt.Errorf("error running TwitchLink HLS VOD download: %w", err)
 		}
 	}
 

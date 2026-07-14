@@ -57,10 +57,6 @@ const AdminInformationPage = () => {
               <Text component={Link} href="https://github.com/lay295/TwitchDownloader" target="_blank" className={classes.link}>TwitchDownloader:</Text>
               <Code ml={5}>{data.program_versions.twitch_downloader}</Code>
             </Flex>
-            <Flex>
-              <Text component={Link} href="https://github.com/yt-dlp/yt-dlp" target="_blank" className={classes.link}>yt-dlp:</Text>
-              <Code ml={5}>{data.program_versions.yt_dlp}</Code>
-            </Flex>
             <div>
               <Text component={Link} href="https://www.ffmpeg.org/" target="_blank" className={classes.link}>FFmpeg:</Text>
               <Code ml={5} block>{data.program_versions.ffmpeg}</Code>

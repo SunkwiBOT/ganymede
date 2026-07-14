@@ -25,6 +25,7 @@ type TwitchGQLError struct {
 
 type TwitchGQLPlaybackAccessTokenData struct {
 	StreamPlaybackAccessToken TwitchGQLPlaybackAccessToken `json:"streamPlaybackAccessToken"`
+	VideoPlaybackAccessToken  TwitchGQLPlaybackAccessToken `json:"videoPlaybackAccessToken"`
 }
 
 type TwitchGQLPlaybackAccessToken struct {
@@ -217,11 +218,16 @@ func parsePlaybackAccessTokenResponse(respBytes []byte) (*TwitchGQLPlaybackAcces
 		return nil, fmt.Errorf("gql playback access token error: %s", resp.Errors[0].Message)
 	}
 
-	if resp.Data.StreamPlaybackAccessToken.Signature == "" || resp.Data.StreamPlaybackAccessToken.Value == "" {
+	token := resp.Data.StreamPlaybackAccessToken
+	if token.Signature == "" || token.Value == "" {
+		token = resp.Data.VideoPlaybackAccessToken
+	}
+
+	if token.Signature == "" || token.Value == "" {
 		return nil, fmt.Errorf("empty playback access token response")
 	}
 
-	return &resp.Data.StreamPlaybackAccessToken, nil
+	return &token, nil
 }
 
 func (c *TwitchConnection) TwitchGQLGetMutedSegments(id string) ([]TwitchGQLMutedSegment, error) {
@@ -304,6 +310,47 @@ func (c *TwitchConnection) TwitchGQLGetPlaybackAccessToken(channel string) (*Twi
 	respBytes, err := twitchGQLRequestWithAuth(body, false)
 	if err != nil {
 		return nil, fmt.Errorf("error getting playback access token without oauth token: %w", err)
+	}
+
+	token, err := parsePlaybackAccessTokenResponse(respBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return token, nil
+}
+
+// TwitchGQLGetVideoPlaybackAccessToken retrieves the playback access token for a Twitch VOD.
+func (c *TwitchConnection) TwitchGQLGetVideoPlaybackAccessToken(videoID string) (*TwitchGQLPlaybackAccessToken, error) {
+	body := fmt.Sprintf(`{
+		"operationName": "PlaybackAccessToken",
+		"variables": {
+			"isLive": false,
+			"login": "",
+			"isVod": true,
+			"vodID": "%s",
+			"playerType": "embed"
+		},
+		"query": "query PlaybackAccessToken($isLive: Boolean!, $login: String!, $isVod: Boolean!, $vodID: ID!, $playerType: String!) {\nstreamPlaybackAccessToken(channelName: $login, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isLive) {\nvalue\nsignature\n}\nvideoPlaybackAccessToken(id: $vodID, params: {platform: \"web\", playerBackend: \"mediaplayer\", playerType: $playerType}) @include(if: $isVod) {\nvalue\nsignature\n}\n}"
+	}`, videoID)
+
+	twitchToken := config.Get().Parameters.TwitchToken
+	if twitchToken != "" {
+		respBytes, err := twitchGQLRequestWithAuth(body, true)
+		if err != nil {
+			log.Warn().Err(err).Msg("failed to get VOD playback access token with Twitch OAuth token, retrying without token")
+		} else {
+			token, parseErr := parsePlaybackAccessTokenResponse(respBytes)
+			if parseErr == nil {
+				return token, nil
+			}
+			log.Warn().Err(parseErr).Msg("configured Twitch OAuth token appears invalid for VOD playback access, retrying without token")
+		}
+	}
+
+	respBytes, err := twitchGQLRequestWithAuth(body, false)
+	if err != nil {
+		return nil, fmt.Errorf("error getting VOD playback access token without oauth token: %w", err)
 	}
 
 	token, err := parsePlaybackAccessTokenResponse(respBytes)

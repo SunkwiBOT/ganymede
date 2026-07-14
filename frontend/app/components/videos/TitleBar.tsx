@@ -34,7 +34,7 @@ const VideoTitleBar = ({ video }: Params) => {
 
         <Divider size="sm" orientation="vertical" mr={10} />
 
-        <div style={{ width: "60%" }}>
+        <div className={classes.titleBarTitle}>
           <Tooltip label={video.title} openDelay={250}>
             <Text size="xl" lineClamp={1} pt={3}>
               {video.title}

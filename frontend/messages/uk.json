@@ -88,7 +88,9 @@
       "showProcessingVideos": "Показувати відео, що оброблюються в нещодавно заархівованих",
       "showProcessingVideosDescription": "Показувати відео, які знаходяться в обробці в 'Нещодавно заархівовані' на головній сторінці.",
       "autoplayVideo": "Автоматичне відтворення відео",
-      "autoplayVideoDescription": "Автоматично починати відтворення відео після їх завантаження."
+      "autoplayVideoDescription": "Автоматично починати відтворення відео після їх завантаження.",
+      "hideContinueWatching": "Приховати \"Продовжити перегляд\"",
+      "hideContinueWatchingDescription": "Приховати розділ \"Продовжити перегляд\" на головній сторінці."
     },
     "changePassword": {
       "title": "Зміна пароля",
@@ -297,8 +299,6 @@
       "twitchTokenDescription": "Вкажіть свій токен Twitch для завантаження трансляцій без реклами та VOD лише для підписників.",
       "convertFFmpegArgsLabel": "Параметри FFmpeg для конвертації відео",
       "convertFFmpegArgsDescription": "Користувацькі аргументи FFmpeg для конвертації відео. Використовується і для live, і для VOD-архівів.",
-      "ytdlpVideoArgsLabel": "Параметри yt-dlp для відео",
-      "ytdlpVideoArgsDescription": "Користувацькі аргументи yt-dlp для завантаження відео. Використовується лише для завантаження VOD.",
       "liveStreamTitle": "Трансляція",
       "proxySettings": "Налаштування проксі",
       "proxySettingsDescription": "Архівуйте трансляції через проксі, щоб уникнути реклами. Ваш токен Twitch не надсилається на проксі.",
@@ -310,7 +310,7 @@
       "whitelistChannelsLabel": "Список винятків (канали)",
       "whitelistChannelsDescription": "Оберіть канали, для яких не буде використовуватися проксі (якщо його увімкнено). Натомість буде використано ваш токен Twitch. Оберіть канали, на які ви підписані.",
       "watchWhileArchivingLabel": "Увімкнути перегляд під час архівування",
-      "watchWhileArchivingDescription": "Завантажувати окремий HLS-потік для перегляду під час архівування трансляцій. Це вдвічі збільшує обсяг сховища, що використовується під час live-архівування. Доступне лише відео — чат не зберігається."
+      "watchWhileArchivingDescription": "Завантажувати окремий HLS-потік для перегляду під час архівування трансляцій. Це вдвічі збільшує обсяг сховища, що використовується під час live-архівування. Twitch live chat вбудовується під час обробки архіву, якщо він доступний."
     },
     "chatSettings": {
       "header": "Налаштування чату",
@@ -1000,6 +1000,7 @@
     "triggerLiveSuccess": "Успіх трансляції",
     "triggerError": "Помилка",
     "triggerIsLive": "У ефірі",
+    "triggerLiveEnded": "Трансляція завершилась",
     "triggersNone": "Немає",
     "actions": {
       "edit": "Редагувати",
@@ -1026,6 +1027,7 @@
       "triggerLiveArchiveSuccess": "Успішне архівування трансляції",
       "triggerError": "Помилка",
       "triggerChannelIsLive": "Канал у ефірі",
+      "triggerChannelLiveEnded": "Трансляція каналу завершилась",
       "messageLabel": "Повідомлення",
       "variablesLabel": "Змінні:",
       "appriseSettingsTitle": "Налаштування Apprise",
@@ -1061,6 +1063,7 @@
       "eventLiveSuccess": "Успішне архівування трансляції",
       "eventError": "Помилка",
       "eventIsLive": "Канал у ефірі",
+      "eventLiveEnded": "Трансляція каналу завершилась",
       "cancelButton": "Скасувати",
       "sendButton": "Надіслати тест"
     },

@@ -31,6 +31,8 @@ const (
 	FieldTriggerError = "trigger_error"
 	// FieldTriggerIsLive holds the string denoting the trigger_is_live field in the database.
 	FieldTriggerIsLive = "trigger_is_live"
+	// FieldTriggerLiveEnded holds the string denoting the trigger_live_ended field in the database.
+	FieldTriggerLiveEnded = "trigger_live_ended"
 	// FieldVideoSuccessTemplate holds the string denoting the video_success_template field in the database.
 	FieldVideoSuccessTemplate = "video_success_template"
 	// FieldLiveSuccessTemplate holds the string denoting the live_success_template field in the database.
@@ -39,6 +41,8 @@ const (
 	FieldErrorTemplate = "error_template"
 	// FieldIsLiveTemplate holds the string denoting the is_live_template field in the database.
 	FieldIsLiveTemplate = "is_live_template"
+	// FieldLiveEndedTemplate holds the string denoting the live_ended_template field in the database.
+	FieldLiveEndedTemplate = "live_ended_template"
 	// FieldAppriseUrls holds the string denoting the apprise_urls field in the database.
 	FieldAppriseUrls = "apprise_urls"
 	// FieldAppriseTitle holds the string denoting the apprise_title field in the database.
@@ -68,10 +72,12 @@ var Columns = []string{
 	FieldTriggerLiveSuccess,
 	FieldTriggerError,
 	FieldTriggerIsLive,
+	FieldTriggerLiveEnded,
 	FieldVideoSuccessTemplate,
 	FieldLiveSuccessTemplate,
 	FieldErrorTemplate,
 	FieldIsLiveTemplate,
+	FieldLiveEndedTemplate,
 	FieldAppriseUrls,
 	FieldAppriseTitle,
 	FieldAppriseType,
@@ -106,6 +112,8 @@ var (
 	DefaultTriggerError bool
 	// DefaultTriggerIsLive holds the default value on creation for the "trigger_is_live" field.
 	DefaultTriggerIsLive bool
+	// DefaultTriggerLiveEnded holds the default value on creation for the "trigger_live_ended" field.
+	DefaultTriggerLiveEnded bool
 	// DefaultVideoSuccessTemplate holds the default value on creation for the "video_success_template" field.
 	DefaultVideoSuccessTemplate string
 	// VideoSuccessTemplateValidator is a validator for the "video_success_template" field. It is called by the builders before save.
@@ -122,6 +130,10 @@ var (
 	DefaultIsLiveTemplate string
 	// IsLiveTemplateValidator is a validator for the "is_live_template" field. It is called by the builders before save.
 	IsLiveTemplateValidator func(string) error
+	// DefaultLiveEndedTemplate holds the default value on creation for the "live_ended_template" field.
+	DefaultLiveEndedTemplate string
+	// LiveEndedTemplateValidator is a validator for the "live_ended_template" field. It is called by the builders before save.
+	LiveEndedTemplateValidator func(string) error
 	// DefaultAppriseUrls holds the default value on creation for the "apprise_urls" field.
 	DefaultAppriseUrls string
 	// AppriseUrlsValidator is a validator for the "apprise_urls" field. It is called by the builders before save.
@@ -270,6 +282,11 @@ func ByTriggerIsLive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTriggerIsLive, opts...).ToFunc()
 }
 
+// ByTriggerLiveEnded orders the results by the trigger_live_ended field.
+func ByTriggerLiveEnded(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTriggerLiveEnded, opts...).ToFunc()
+}
+
 // ByVideoSuccessTemplate orders the results by the video_success_template field.
 func ByVideoSuccessTemplate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldVideoSuccessTemplate, opts...).ToFunc()
@@ -288,6 +305,11 @@ func ByErrorTemplate(opts ...sql.OrderTermOption) OrderOption {
 // ByIsLiveTemplate orders the results by the is_live_template field.
 func ByIsLiveTemplate(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldIsLiveTemplate, opts...).ToFunc()
+}
+
+// ByLiveEndedTemplate orders the results by the live_ended_template field.
+func ByLiveEndedTemplate(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLiveEndedTemplate, opts...).ToFunc()
 }
 
 // ByAppriseUrls orders the results by the apprise_urls field.

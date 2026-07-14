@@ -45,7 +45,6 @@ const AdminSettingsPage = () => {
         twitch_token: data?.parameters.twitch_token || "",
         video_convert: data?.parameters.video_convert || "",
         chat_render: data?.parameters.chat_render || "",
-        yt_dlp_video: data?.parameters.yt_dlp_video || "",
       },
       archive: {
         save_as_hls: data?.archive.save_as_hls ?? false,
@@ -301,13 +300,6 @@ const AdminSettingsPage = () => {
               description={t('videoSettings.convertFFmpegArgsDescription')}
               key={form.key('parameters.video_convert')}
               {...form.getInputProps('parameters.video_convert')}
-            />
-
-            <TextInput
-              label={t('videoSettings.ytdlpVideoArgsLabel')}
-              description={t('videoSettings.ytdlpVideoArgsDescription')}
-              key={form.key('parameters.yt_dlp_video')}
-              {...form.getInputProps('parameters.yt_dlp_video')}
             />
 
             <Title mt={10} order={3}>{t('videoSettings.liveStreamTitle')}</Title>

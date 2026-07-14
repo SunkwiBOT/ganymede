@@ -35,10 +35,12 @@ type NotificationRequest struct {
 	TriggerLiveSuccess   bool   `json:"trigger_live_success"`
 	TriggerError         bool   `json:"trigger_error"`
 	TriggerIsLive        bool   `json:"trigger_is_live"`
+	TriggerLiveEnded     bool   `json:"trigger_live_ended"`
 	VideoSuccessTemplate string `json:"video_success_template"`
 	LiveSuccessTemplate  string `json:"live_success_template"`
 	ErrorTemplate        string `json:"error_template"`
 	IsLiveTemplate       string `json:"is_live_template"`
+	LiveEndedTemplate    string `json:"live_ended_template"`
 	AppriseUrls          string `json:"apprise_urls"`
 	AppriseTitle         string `json:"apprise_title"`
 	AppriseType          string `json:"apprise_type" validate:"omitempty,oneof=info success warning failure"`
@@ -64,10 +66,12 @@ type NotificationResponse struct {
 	TriggerLiveSuccess   bool      `json:"trigger_live_success"`
 	TriggerError         bool      `json:"trigger_error"`
 	TriggerIsLive        bool      `json:"trigger_is_live"`
+	TriggerLiveEnded     bool      `json:"trigger_live_ended"`
 	VideoSuccessTemplate string    `json:"video_success_template"`
 	LiveSuccessTemplate  string    `json:"live_success_template"`
 	ErrorTemplate        string    `json:"error_template"`
 	IsLiveTemplate       string    `json:"is_live_template"`
+	LiveEndedTemplate    string    `json:"live_ended_template"`
 	AppriseUrls          string    `json:"apprise_urls"`
 	AppriseTitle         string    `json:"apprise_title"`
 	AppriseType          string    `json:"apprise_type"`
@@ -89,10 +93,12 @@ func toNotificationResponse(n *ent.Notification) NotificationResponse {
 		TriggerLiveSuccess:   n.TriggerLiveSuccess,
 		TriggerError:         n.TriggerError,
 		TriggerIsLive:        n.TriggerIsLive,
+		TriggerLiveEnded:     n.TriggerLiveEnded,
 		VideoSuccessTemplate: n.VideoSuccessTemplate,
 		LiveSuccessTemplate:  n.LiveSuccessTemplate,
 		ErrorTemplate:        n.ErrorTemplate,
 		IsLiveTemplate:       n.IsLiveTemplate,
+		LiveEndedTemplate:    n.LiveEndedTemplate,
 		AppriseUrls:          n.AppriseUrls,
 		AppriseTitle:         n.AppriseTitle,
 		AppriseType:          string(n.AppriseType),
@@ -115,7 +121,7 @@ func toNotificationResponses(notifications []*ent.Notification) []NotificationRe
 // validateNotificationRequest performs custom validation beyond struct tags.
 func validateNotificationRequest(req NotificationRequest) error {
 	// At least one trigger must be enabled
-	if !req.TriggerVideoSuccess && !req.TriggerLiveSuccess && !req.TriggerError && !req.TriggerIsLive {
+	if !req.TriggerVideoSuccess && !req.TriggerLiveSuccess && !req.TriggerError && !req.TriggerIsLive && !req.TriggerLiveEnded {
 		return fmt.Errorf("at least one trigger must be enabled")
 	}
 
@@ -131,6 +137,9 @@ func validateNotificationRequest(req NotificationRequest) error {
 	}
 	if req.TriggerIsLive && strings.TrimSpace(req.IsLiveTemplate) == "" {
 		return fmt.Errorf("is live template is required when is live trigger is enabled")
+	}
+	if req.TriggerLiveEnded && strings.TrimSpace(req.LiveEndedTemplate) == "" {
+		return fmt.Errorf("live ended template is required when live ended trigger is enabled")
 	}
 
 	// Apprise requires at least one of urls or tag
@@ -152,10 +161,12 @@ func notificationFromRequest(req NotificationRequest) *ent.Notification {
 		TriggerLiveSuccess:   req.TriggerLiveSuccess,
 		TriggerError:         req.TriggerError,
 		TriggerIsLive:        req.TriggerIsLive,
+		TriggerLiveEnded:     req.TriggerLiveEnded,
 		VideoSuccessTemplate: req.VideoSuccessTemplate,
 		LiveSuccessTemplate:  req.LiveSuccessTemplate,
 		ErrorTemplate:        req.ErrorTemplate,
 		IsLiveTemplate:       req.IsLiveTemplate,
+		LiveEndedTemplate:    req.LiveEndedTemplate,
 		AppriseUrls:          req.AppriseUrls,
 		AppriseTitle:         req.AppriseTitle,
 		AppriseType:          entNotification.AppriseType(req.AppriseType),
@@ -166,7 +177,7 @@ func notificationFromRequest(req NotificationRequest) *ent.Notification {
 
 // TestNotificationRequest is the request body for testing a notification.
 type TestNotificationRequest struct {
-	EventType string `json:"event_type" validate:"required,oneof=video_success live_success error is_live"`
+	EventType string `json:"event_type" validate:"required,oneof=video_success live_success error is_live live_ended"`
 }
 
 // GetNotifications godoc

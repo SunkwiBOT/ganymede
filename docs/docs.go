@@ -4236,9 +4236,6 @@ const docTemplate = `{
                 },
                 "twitch_downloader": {
                     "type": "string"
-                },
-                "yt_dlp": {
-                    "type": "string"
                 }
             }
         },
@@ -4558,10 +4555,6 @@ const docTemplate = `{
                         },
                         "video_convert": {
                             "description": "FFmpeg arguments for video conversion.",
-                            "type": "string"
-                        },
-                        "yt_dlp_video": {
-                            "description": "yt-dlp arguments for video downloads.",
                             "type": "string"
                         }
                     }
@@ -6180,6 +6173,9 @@ const docTemplate = `{
                 "is_live_template": {
                     "type": "string"
                 },
+                "live_ended_template": {
+                    "type": "string"
+                },
                 "live_success_template": {
                     "type": "string"
                 },
@@ -6190,6 +6186,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "trigger_is_live": {
+                    "type": "boolean"
+                },
+                "trigger_live_ended": {
                     "type": "boolean"
                 },
                 "trigger_live_success": {
@@ -6246,6 +6245,9 @@ const docTemplate = `{
                 "is_live_template": {
                     "type": "string"
                 },
+                "live_ended_template": {
+                    "type": "string"
+                },
                 "live_success_template": {
                     "type": "string"
                 },
@@ -6256,6 +6258,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "trigger_is_live": {
+                    "type": "boolean"
+                },
+                "trigger_live_ended": {
                     "type": "boolean"
                 },
                 "trigger_live_success": {
@@ -6428,7 +6433,8 @@ const docTemplate = `{
                         "video_success",
                         "live_success",
                         "error",
-                        "is_live"
+                        "is_live",
+                        "live_ended"
                     ]
                 }
             }

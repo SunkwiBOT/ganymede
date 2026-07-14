@@ -1,8 +1,8 @@
 "use client"
-import { useFetchVideo, useGetVideoClips, VideoType } from "@/app/hooks/useVideos";
-import React, { useEffect, useRef } from "react";
+import { Platform, useFetchVideo, useGetVideoClips, VideoType } from "@/app/hooks/useVideos";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import classes from "./VideoPage.module.css"
-import { Box, Container, useMantineTheme } from "@mantine/core";
+import { Box, Container, useComputedColorScheme, useMantineTheme } from "@mantine/core";
 import VideoPlayer from "@/app/components/videos/Player";
 import VideoTitleBar from "@/app/components/videos/TitleBar";
 import ChatPlayer from "@/app/components/videos/ChatPlayer";
@@ -20,6 +20,37 @@ import { useTranslations } from "next-intl";
 interface Params {
   id: string;
 }
+
+const TwitchLiveChat = ({ channelName }: { channelName: string }) => {
+  const [parentHost, setParentHost] = useState<string | null>(null);
+  const computedColorScheme = useComputedColorScheme('dark', { getInitialValueInEffect: true });
+
+  useEffect(() => {
+    setParentHost(window.location.hostname);
+  }, []);
+
+  const chatSrc = useMemo(() => {
+    if (!parentHost || !channelName) return "";
+
+    const params = new URLSearchParams();
+    params.append("parent", parentHost);
+    if (computedColorScheme === "dark") {
+      params.append("darkpopout", "");
+    }
+
+    return `https://www.twitch.tv/embed/${encodeURIComponent(channelName)}/chat?${params.toString()}`;
+  }, [channelName, computedColorScheme, parentHost]);
+
+  if (!chatSrc) return null;
+
+  return (
+    <iframe
+      className={classes.twitchChatEmbed}
+      src={chatSrc}
+      title={`Twitch chat ${channelName}`}
+    />
+  );
+};
 
 const VideoPage = ({ params }: { params: Promise<Params> }) => {
   const theme = useMantineTheme()
@@ -57,6 +88,14 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
     return <div>{t('error')}</div>
   }
 
+  const showArchivedChat = Boolean(data.chat_path && !data.processing);
+  const showTwitchLiveChat = Boolean(
+    data.processing &&
+    data.type === VideoType.Live &&
+    data.platform === Platform.Twitch &&
+    data.edges.channel.name
+  );
+  const showChat = !hideChat && (showArchivedChat || showTwitchLiveChat);
 
   return (
     <div>
@@ -72,19 +111,19 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
         <div className={
           isMobile
             ? undefined
-            : (!data.chat_path ? classes.leftColumnNoChat : classes.leftColumn)
+            : (!showChat ? classes.leftColumnNoChat : classes.leftColumn)
         }>
           <div className={
             isMobile
               ? undefined
               : (videoTheaterMode || fullscreen ? classes.videoPlayerTheaterMode : classes.videoPlayer)
           }>
-            <VideoPlayer video={data} ref={player} />
+            <VideoPlayer key={data.id} video={data} ref={player} />
           </div>
         </div>
 
         {/* Chat */}
-        {data.chat_path && !hideChat && !data.processing && (
+        {showChat && (
           <div
             className={isMobile ? classes.chatColumnMobile : classes.rightColumn}
             style={isMobile ? undefined : { height: "auto", maxHeight: "auto" }}
@@ -97,7 +136,11 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
               }
               style={isMobile ? { height: "100%" } : undefined}
             >
-              <ChatPlayer video={data} playerRef={player} />
+              {showArchivedChat ? (
+                <ChatPlayer key={data.id} video={data} playerRef={player} />
+              ) : (
+                <TwitchLiveChat channelName={data.edges.channel.name} />
+              )}
             </div>
           </div>
         )}

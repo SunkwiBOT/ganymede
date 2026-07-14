@@ -112,6 +112,20 @@ func (_c *NotificationCreate) SetNillableTriggerIsLive(v *bool) *NotificationCre
 	return _c
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (_c *NotificationCreate) SetTriggerLiveEnded(v bool) *NotificationCreate {
+	_c.mutation.SetTriggerLiveEnded(v)
+	return _c
+}
+
+// SetNillableTriggerLiveEnded sets the "trigger_live_ended" field if the given value is not nil.
+func (_c *NotificationCreate) SetNillableTriggerLiveEnded(v *bool) *NotificationCreate {
+	if v != nil {
+		_c.SetTriggerLiveEnded(*v)
+	}
+	return _c
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (_c *NotificationCreate) SetVideoSuccessTemplate(v string) *NotificationCreate {
 	_c.mutation.SetVideoSuccessTemplate(v)
@@ -164,6 +178,20 @@ func (_c *NotificationCreate) SetIsLiveTemplate(v string) *NotificationCreate {
 func (_c *NotificationCreate) SetNillableIsLiveTemplate(v *string) *NotificationCreate {
 	if v != nil {
 		_c.SetIsLiveTemplate(*v)
+	}
+	return _c
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (_c *NotificationCreate) SetLiveEndedTemplate(v string) *NotificationCreate {
+	_c.mutation.SetLiveEndedTemplate(v)
+	return _c
+}
+
+// SetNillableLiveEndedTemplate sets the "live_ended_template" field if the given value is not nil.
+func (_c *NotificationCreate) SetNillableLiveEndedTemplate(v *string) *NotificationCreate {
+	if v != nil {
+		_c.SetLiveEndedTemplate(*v)
 	}
 	return _c
 }
@@ -335,6 +363,10 @@ func (_c *NotificationCreate) defaults() {
 		v := notification.DefaultTriggerIsLive
 		_c.mutation.SetTriggerIsLive(v)
 	}
+	if _, ok := _c.mutation.TriggerLiveEnded(); !ok {
+		v := notification.DefaultTriggerLiveEnded
+		_c.mutation.SetTriggerLiveEnded(v)
+	}
 	if _, ok := _c.mutation.VideoSuccessTemplate(); !ok {
 		v := notification.DefaultVideoSuccessTemplate
 		_c.mutation.SetVideoSuccessTemplate(v)
@@ -350,6 +382,10 @@ func (_c *NotificationCreate) defaults() {
 	if _, ok := _c.mutation.IsLiveTemplate(); !ok {
 		v := notification.DefaultIsLiveTemplate
 		_c.mutation.SetIsLiveTemplate(v)
+	}
+	if _, ok := _c.mutation.LiveEndedTemplate(); !ok {
+		v := notification.DefaultLiveEndedTemplate
+		_c.mutation.SetLiveEndedTemplate(v)
 	}
 	if _, ok := _c.mutation.AppriseUrls(); !ok {
 		v := notification.DefaultAppriseUrls
@@ -426,6 +462,9 @@ func (_c *NotificationCreate) check() error {
 	if _, ok := _c.mutation.TriggerIsLive(); !ok {
 		return &ValidationError{Name: "trigger_is_live", err: errors.New(`ent: missing required field "Notification.trigger_is_live"`)}
 	}
+	if _, ok := _c.mutation.TriggerLiveEnded(); !ok {
+		return &ValidationError{Name: "trigger_live_ended", err: errors.New(`ent: missing required field "Notification.trigger_live_ended"`)}
+	}
 	if _, ok := _c.mutation.VideoSuccessTemplate(); !ok {
 		return &ValidationError{Name: "video_success_template", err: errors.New(`ent: missing required field "Notification.video_success_template"`)}
 	}
@@ -456,6 +495,14 @@ func (_c *NotificationCreate) check() error {
 	if v, ok := _c.mutation.IsLiveTemplate(); ok {
 		if err := notification.IsLiveTemplateValidator(v); err != nil {
 			return &ValidationError{Name: "is_live_template", err: fmt.Errorf(`ent: validator failed for field "Notification.is_live_template": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.LiveEndedTemplate(); !ok {
+		return &ValidationError{Name: "live_ended_template", err: errors.New(`ent: missing required field "Notification.live_ended_template"`)}
+	}
+	if v, ok := _c.mutation.LiveEndedTemplate(); ok {
+		if err := notification.LiveEndedTemplateValidator(v); err != nil {
+			return &ValidationError{Name: "live_ended_template", err: fmt.Errorf(`ent: validator failed for field "Notification.live_ended_template": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.AppriseUrls(); ok {
@@ -563,6 +610,10 @@ func (_c *NotificationCreate) createSpec() (*Notification, *sqlgraph.CreateSpec)
 		_spec.SetField(notification.FieldTriggerIsLive, field.TypeBool, value)
 		_node.TriggerIsLive = value
 	}
+	if value, ok := _c.mutation.TriggerLiveEnded(); ok {
+		_spec.SetField(notification.FieldTriggerLiveEnded, field.TypeBool, value)
+		_node.TriggerLiveEnded = value
+	}
 	if value, ok := _c.mutation.VideoSuccessTemplate(); ok {
 		_spec.SetField(notification.FieldVideoSuccessTemplate, field.TypeString, value)
 		_node.VideoSuccessTemplate = value
@@ -578,6 +629,10 @@ func (_c *NotificationCreate) createSpec() (*Notification, *sqlgraph.CreateSpec)
 	if value, ok := _c.mutation.IsLiveTemplate(); ok {
 		_spec.SetField(notification.FieldIsLiveTemplate, field.TypeString, value)
 		_node.IsLiveTemplate = value
+	}
+	if value, ok := _c.mutation.LiveEndedTemplate(); ok {
+		_spec.SetField(notification.FieldLiveEndedTemplate, field.TypeString, value)
+		_node.LiveEndedTemplate = value
 	}
 	if value, ok := _c.mutation.AppriseUrls(); ok {
 		_spec.SetField(notification.FieldAppriseUrls, field.TypeString, value)
@@ -755,6 +810,18 @@ func (u *NotificationUpsert) UpdateTriggerIsLive() *NotificationUpsert {
 	return u
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (u *NotificationUpsert) SetTriggerLiveEnded(v bool) *NotificationUpsert {
+	u.Set(notification.FieldTriggerLiveEnded, v)
+	return u
+}
+
+// UpdateTriggerLiveEnded sets the "trigger_live_ended" field to the value that was provided on create.
+func (u *NotificationUpsert) UpdateTriggerLiveEnded() *NotificationUpsert {
+	u.SetExcluded(notification.FieldTriggerLiveEnded)
+	return u
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (u *NotificationUpsert) SetVideoSuccessTemplate(v string) *NotificationUpsert {
 	u.Set(notification.FieldVideoSuccessTemplate, v)
@@ -800,6 +867,18 @@ func (u *NotificationUpsert) SetIsLiveTemplate(v string) *NotificationUpsert {
 // UpdateIsLiveTemplate sets the "is_live_template" field to the value that was provided on create.
 func (u *NotificationUpsert) UpdateIsLiveTemplate() *NotificationUpsert {
 	u.SetExcluded(notification.FieldIsLiveTemplate)
+	return u
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (u *NotificationUpsert) SetLiveEndedTemplate(v string) *NotificationUpsert {
+	u.Set(notification.FieldLiveEndedTemplate, v)
+	return u
+}
+
+// UpdateLiveEndedTemplate sets the "live_ended_template" field to the value that was provided on create.
+func (u *NotificationUpsert) UpdateLiveEndedTemplate() *NotificationUpsert {
+	u.SetExcluded(notification.FieldLiveEndedTemplate)
 	return u
 }
 
@@ -1056,6 +1135,20 @@ func (u *NotificationUpsertOne) UpdateTriggerIsLive() *NotificationUpsertOne {
 	})
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (u *NotificationUpsertOne) SetTriggerLiveEnded(v bool) *NotificationUpsertOne {
+	return u.Update(func(s *NotificationUpsert) {
+		s.SetTriggerLiveEnded(v)
+	})
+}
+
+// UpdateTriggerLiveEnded sets the "trigger_live_ended" field to the value that was provided on create.
+func (u *NotificationUpsertOne) UpdateTriggerLiveEnded() *NotificationUpsertOne {
+	return u.Update(func(s *NotificationUpsert) {
+		s.UpdateTriggerLiveEnded()
+	})
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (u *NotificationUpsertOne) SetVideoSuccessTemplate(v string) *NotificationUpsertOne {
 	return u.Update(func(s *NotificationUpsert) {
@@ -1109,6 +1202,20 @@ func (u *NotificationUpsertOne) SetIsLiveTemplate(v string) *NotificationUpsertO
 func (u *NotificationUpsertOne) UpdateIsLiveTemplate() *NotificationUpsertOne {
 	return u.Update(func(s *NotificationUpsert) {
 		s.UpdateIsLiveTemplate()
+	})
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (u *NotificationUpsertOne) SetLiveEndedTemplate(v string) *NotificationUpsertOne {
+	return u.Update(func(s *NotificationUpsert) {
+		s.SetLiveEndedTemplate(v)
+	})
+}
+
+// UpdateLiveEndedTemplate sets the "live_ended_template" field to the value that was provided on create.
+func (u *NotificationUpsertOne) UpdateLiveEndedTemplate() *NotificationUpsertOne {
+	return u.Update(func(s *NotificationUpsert) {
+		s.UpdateLiveEndedTemplate()
 	})
 }
 
@@ -1547,6 +1654,20 @@ func (u *NotificationUpsertBulk) UpdateTriggerIsLive() *NotificationUpsertBulk {
 	})
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (u *NotificationUpsertBulk) SetTriggerLiveEnded(v bool) *NotificationUpsertBulk {
+	return u.Update(func(s *NotificationUpsert) {
+		s.SetTriggerLiveEnded(v)
+	})
+}
+
+// UpdateTriggerLiveEnded sets the "trigger_live_ended" field to the value that was provided on create.
+func (u *NotificationUpsertBulk) UpdateTriggerLiveEnded() *NotificationUpsertBulk {
+	return u.Update(func(s *NotificationUpsert) {
+		s.UpdateTriggerLiveEnded()
+	})
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (u *NotificationUpsertBulk) SetVideoSuccessTemplate(v string) *NotificationUpsertBulk {
 	return u.Update(func(s *NotificationUpsert) {
@@ -1600,6 +1721,20 @@ func (u *NotificationUpsertBulk) SetIsLiveTemplate(v string) *NotificationUpsert
 func (u *NotificationUpsertBulk) UpdateIsLiveTemplate() *NotificationUpsertBulk {
 	return u.Update(func(s *NotificationUpsert) {
 		s.UpdateIsLiveTemplate()
+	})
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (u *NotificationUpsertBulk) SetLiveEndedTemplate(v string) *NotificationUpsertBulk {
+	return u.Update(func(s *NotificationUpsert) {
+		s.SetLiveEndedTemplate(v)
+	})
+}
+
+// UpdateLiveEndedTemplate sets the "live_ended_template" field to the value that was provided on create.
+func (u *NotificationUpsertBulk) UpdateLiveEndedTemplate() *NotificationUpsertBulk {
+	return u.Update(func(s *NotificationUpsert) {
+		s.UpdateLiveEndedTemplate()
 	})
 }
 

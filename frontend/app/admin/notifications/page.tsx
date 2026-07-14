@@ -80,6 +80,11 @@ const TRIGGER_VARIABLES: Record<string, { label: string; vars: string[] }[]> = {
     { label: "Channel", vars: CHANNEL_VARS },
     { label: "Live", vars: ["category"] },
   ],
+  live_ended: [
+    { label: "Channel", vars: CHANNEL_VARS },
+    { label: "Video", vars: VIDEO_VARS },
+    { label: "Queue", vars: QUEUE_VARS },
+  ],
 };
 
 const TemplateVariableHints = ({ triggerKey, variablesLabel }: { triggerKey: string; variablesLabel: string }) => {
@@ -135,10 +140,12 @@ const AdminNotificationsPage = () => {
       trigger_live_success: false,
       trigger_error: false,
       trigger_is_live: false,
+      trigger_live_ended: false,
       video_success_template: "✅ Video Archived: {{vod_title}} by {{channel_display_name}}.",
       live_success_template: "✅ Live Stream Archived: {{vod_title}} by {{channel_display_name}}.",
       error_template: "⚠️ Error: Queue {{queue_id}} failed at task {{failed_task}}.",
       is_live_template: "🔴 {{channel_display_name}} is live!",
+      live_ended_template: "⚫ {{channel_display_name}} is offline.",
       apprise_urls: "",
       apprise_title: "",
       apprise_type: AppriseType.Info,
@@ -165,7 +172,7 @@ const AdminNotificationsPage = () => {
         }
       }
 
-      if (!values.trigger_video_success && !values.trigger_live_success && !values.trigger_error && !values.trigger_is_live) {
+      if (!values.trigger_video_success && !values.trigger_live_success && !values.trigger_error && !values.trigger_is_live && !values.trigger_live_ended) {
         errors.trigger_video_success = t("validation.triggerRequired");
       }
 
@@ -180,6 +187,9 @@ const AdminNotificationsPage = () => {
       }
       if (values.trigger_is_live && !values.is_live_template.trim()) {
         errors.is_live_template = t("validation.templateRequired");
+      }
+      if (values.trigger_live_ended && !values.live_ended_template.trim()) {
+        errors.live_ended_template = t("validation.templateRequired");
       }
 
       if (values.type === NotificationType.Apprise && !values.apprise_urls.trim() && !values.apprise_tag.trim()) {
@@ -208,10 +218,12 @@ const AdminNotificationsPage = () => {
       trigger_live_success: n.trigger_live_success,
       trigger_error: n.trigger_error,
       trigger_is_live: n.trigger_is_live,
+      trigger_live_ended: n.trigger_live_ended,
       video_success_template: n.video_success_template,
       live_success_template: n.live_success_template,
       error_template: n.error_template,
       is_live_template: n.is_live_template,
+      live_ended_template: n.live_ended_template,
       apprise_urls: n.apprise_urls,
       apprise_title: n.apprise_title,
       apprise_type: n.apprise_type || AppriseType.Info,
@@ -358,6 +370,7 @@ const AdminNotificationsPage = () => {
                   if (n.trigger_live_success) triggers.push(t("triggerLiveSuccess"));
                   if (n.trigger_error) triggers.push(t("triggerError"));
                   if (n.trigger_is_live) triggers.push(t("triggerIsLive"));
+                  if (n.trigger_live_ended) triggers.push(t("triggerLiveEnded"));
                   return (
                     <Group gap={4}>
                       {triggers.map((tr) => (
@@ -545,6 +558,24 @@ const AdminNotificationsPage = () => {
             </>
           )}
 
+          <Checkbox
+            mt={10}
+            label={t("drawer.triggerChannelLiveEnded")}
+            {...form.getInputProps("trigger_live_ended", { type: "checkbox" })}
+          />
+          {form.values.trigger_live_ended && (
+            <>
+              <Textarea
+                mt={5}
+                ml={28}
+                label={t("drawer.messageLabel")}
+                required
+                {...form.getInputProps("live_ended_template")}
+              />
+              <TemplateVariableHints triggerKey="live_ended" variablesLabel={t("drawer.variablesLabel")} />
+            </>
+          )}
+
           {/* Apprise-specific fields */}
           {form.values.type === NotificationType.Apprise && (
             <>
@@ -638,6 +669,7 @@ const AdminNotificationsPage = () => {
                 { value: NotificationEventType.LiveSuccess, label: t("testModal.eventLiveSuccess") },
                 { value: NotificationEventType.Error, label: t("testModal.eventError") },
                 { value: NotificationEventType.IsLive, label: t("testModal.eventIsLive") },
+                { value: NotificationEventType.LiveEnded, label: t("testModal.eventLiveEnded") },
               ]}
               value={testEventType}
               onChange={(e) => setTestEventType(e.currentTarget.value as NotificationEventType)}

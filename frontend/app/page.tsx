@@ -6,9 +6,11 @@ import ContinueWatching from "./components/landing/ContinueWatching";
 import RecentlyArchived from "./components/landing/RecentlyArchived";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
+import useSettingsStore from "./store/useSettingsStore";
 
 export default function Home() {
   const { isLoggedIn } = useAuthStore();
+  const hideContinueWatching = useSettingsStore((state) => state.hideContinueWatching);
 
   useEffect(() => {
     document.title = "Ganymede";
@@ -24,7 +26,7 @@ export default function Home() {
         </Box>
       )}
 
-      {isLoggedIn && (
+      {isLoggedIn && !hideContinueWatching && (
         <Box>
           <Center>
             <Title>{t('continueWatching')}</Title>

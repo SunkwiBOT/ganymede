@@ -90,6 +90,11 @@ func TriggerIsLive(v bool) predicate.Notification {
 	return predicate.Notification(sql.FieldEQ(FieldTriggerIsLive, v))
 }
 
+// TriggerLiveEnded applies equality check predicate on the "trigger_live_ended" field. It's identical to TriggerLiveEndedEQ.
+func TriggerLiveEnded(v bool) predicate.Notification {
+	return predicate.Notification(sql.FieldEQ(FieldTriggerLiveEnded, v))
+}
+
 // VideoSuccessTemplate applies equality check predicate on the "video_success_template" field. It's identical to VideoSuccessTemplateEQ.
 func VideoSuccessTemplate(v string) predicate.Notification {
 	return predicate.Notification(sql.FieldEQ(FieldVideoSuccessTemplate, v))
@@ -108,6 +113,11 @@ func ErrorTemplate(v string) predicate.Notification {
 // IsLiveTemplate applies equality check predicate on the "is_live_template" field. It's identical to IsLiveTemplateEQ.
 func IsLiveTemplate(v string) predicate.Notification {
 	return predicate.Notification(sql.FieldEQ(FieldIsLiveTemplate, v))
+}
+
+// LiveEndedTemplate applies equality check predicate on the "live_ended_template" field. It's identical to LiveEndedTemplateEQ.
+func LiveEndedTemplate(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldEQ(FieldLiveEndedTemplate, v))
 }
 
 // AppriseUrls applies equality check predicate on the "apprise_urls" field. It's identical to AppriseUrlsEQ.
@@ -333,6 +343,16 @@ func TriggerIsLiveEQ(v bool) predicate.Notification {
 // TriggerIsLiveNEQ applies the NEQ predicate on the "trigger_is_live" field.
 func TriggerIsLiveNEQ(v bool) predicate.Notification {
 	return predicate.Notification(sql.FieldNEQ(FieldTriggerIsLive, v))
+}
+
+// TriggerLiveEndedEQ applies the EQ predicate on the "trigger_live_ended" field.
+func TriggerLiveEndedEQ(v bool) predicate.Notification {
+	return predicate.Notification(sql.FieldEQ(FieldTriggerLiveEnded, v))
+}
+
+// TriggerLiveEndedNEQ applies the NEQ predicate on the "trigger_live_ended" field.
+func TriggerLiveEndedNEQ(v bool) predicate.Notification {
+	return predicate.Notification(sql.FieldNEQ(FieldTriggerLiveEnded, v))
 }
 
 // VideoSuccessTemplateEQ applies the EQ predicate on the "video_success_template" field.
@@ -593,6 +613,71 @@ func IsLiveTemplateEqualFold(v string) predicate.Notification {
 // IsLiveTemplateContainsFold applies the ContainsFold predicate on the "is_live_template" field.
 func IsLiveTemplateContainsFold(v string) predicate.Notification {
 	return predicate.Notification(sql.FieldContainsFold(FieldIsLiveTemplate, v))
+}
+
+// LiveEndedTemplateEQ applies the EQ predicate on the "live_ended_template" field.
+func LiveEndedTemplateEQ(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldEQ(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateNEQ applies the NEQ predicate on the "live_ended_template" field.
+func LiveEndedTemplateNEQ(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldNEQ(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateIn applies the In predicate on the "live_ended_template" field.
+func LiveEndedTemplateIn(vs ...string) predicate.Notification {
+	return predicate.Notification(sql.FieldIn(FieldLiveEndedTemplate, vs...))
+}
+
+// LiveEndedTemplateNotIn applies the NotIn predicate on the "live_ended_template" field.
+func LiveEndedTemplateNotIn(vs ...string) predicate.Notification {
+	return predicate.Notification(sql.FieldNotIn(FieldLiveEndedTemplate, vs...))
+}
+
+// LiveEndedTemplateGT applies the GT predicate on the "live_ended_template" field.
+func LiveEndedTemplateGT(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldGT(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateGTE applies the GTE predicate on the "live_ended_template" field.
+func LiveEndedTemplateGTE(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldGTE(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateLT applies the LT predicate on the "live_ended_template" field.
+func LiveEndedTemplateLT(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldLT(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateLTE applies the LTE predicate on the "live_ended_template" field.
+func LiveEndedTemplateLTE(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldLTE(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateContains applies the Contains predicate on the "live_ended_template" field.
+func LiveEndedTemplateContains(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldContains(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateHasPrefix applies the HasPrefix predicate on the "live_ended_template" field.
+func LiveEndedTemplateHasPrefix(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldHasPrefix(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateHasSuffix applies the HasSuffix predicate on the "live_ended_template" field.
+func LiveEndedTemplateHasSuffix(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldHasSuffix(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateEqualFold applies the EqualFold predicate on the "live_ended_template" field.
+func LiveEndedTemplateEqualFold(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldEqualFold(FieldLiveEndedTemplate, v))
+}
+
+// LiveEndedTemplateContainsFold applies the ContainsFold predicate on the "live_ended_template" field.
+func LiveEndedTemplateContainsFold(v string) predicate.Notification {
+	return predicate.Notification(sql.FieldContainsFold(FieldLiveEndedTemplate, v))
 }
 
 // AppriseUrlsEQ applies the EQ predicate on the "apprise_urls" field.

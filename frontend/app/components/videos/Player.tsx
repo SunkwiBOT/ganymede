@@ -23,6 +23,24 @@ interface Params {
   ref: RefObject<MediaPlayerInstance | null>;
 }
 
+const LIVE_EDGE_FALLBACK_DELAY_SECONDS = 2;
+
+const seekToProcessingLiveEdge = (player: MediaPlayerInstance): boolean => {
+  try {
+    player.seekToLiveEdge();
+  } catch {
+    // The player can throw if the provider is not ready yet; fall back below.
+  }
+
+  const seekableEnd = player.state.seekableEnd;
+  if (!Number.isFinite(seekableEnd) || seekableEnd <= 0) {
+    return false;
+  }
+
+  player.currentTime = Math.max(0, seekableEnd - LIVE_EDGE_FALLBACK_DELAY_SECONDS);
+  return true;
+};
+
 const AbsoluteTimeDisplay = ({ streamedAt }: { streamedAt: string | Date }) => {
   const currentTime = useMediaState('currentTime');
   const flooredCurrentTime = Math.floor(currentTime);
@@ -58,6 +76,14 @@ const VideoPlayer = ({ video, ref }: Params) => {
   const videoTheaterMode = useSettingsStore((state) => state.videoTheaterMode);
   const showAbsoluteTime = useSettingsStore((state) => state.showAbsoluteTime);
   const autoplayVideo = useSettingsStore((state) => state.autoplayVideo);
+  const isProcessingLive = video.processing && video.type === VideoType.Live;
+  const urlStartTime = useMemo(() => {
+    const time = searchParams.get("t");
+    if (time === null) return null;
+
+    const parsedTime = parseInt(time, 10);
+    return Number.isFinite(parsedTime) ? parsedTime : null;
+  }, [searchParams]);
 
   const axiosPrivate = useAxiosPrivate();
   // get playback data
@@ -82,23 +108,26 @@ const VideoPlayer = ({ video, ref }: Params) => {
   useEffect(() => {
     if (!player) return
 
-    const videoExtension = video.video_path.substr(video.video_path.length - 4)
+    const videoPath = video.video_path ?? "";
+    const videoExtension = videoPath.substring(videoPath.length - 4)
     let videoType: VideoMimeType = "video/mp4"
     if (videoExtension == "m3u8") {
       videoType = "video/object";
     }
 
-    // Allow for processing videos to be played via HLS from the temp directory if enabled
-    if (video.processing) {
+    // Only processing live streams are watchable while archiving through the temporary HLS output.
+    if (isProcessingLive && video.tmp_video_hls_path) {
       setVideoSource({
         src: `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.tmp_video_hls_path)}/${video.ext_id}-video.m3u8`,
         type: "application/x-mpegurl"
       })
-    } else {
+    } else if (!video.processing && videoPath) {
       setVideoSource({
-        src: `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.video_path)}`,
+        src: `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(videoPath)}`,
         type: videoType
       })
+    } else {
+      setVideoSource(undefined);
     }
 
     if (video.thumbnail_path) {
@@ -112,28 +141,53 @@ const VideoPlayer = ({ video, ref }: Params) => {
       setPlayerVolume(parseFloat(localVolume))
     }
 
-    player.current?.subscribe(({ volume }) => {
+    const unsubscribe = player.current?.subscribe(({ volume }) => {
       if (volume != 1) {
         localStorage.setItem("ganymede-volume", volume.toString());
       }
     });
 
+    return unsubscribe;
+  }, [isProcessingLive, player, video])
+
+  useEffect(() => {
+    const currentPlayer = player.current;
+    if (!currentPlayer || hasInitializedPlaybackTime.current) return;
+
     if (!hasInitializedPlaybackTime.current) {
+      if (isProcessingLive) {
+        if (urlStartTime !== null) {
+          currentPlayer.currentTime = urlStartTime;
+          hasInitializedPlaybackTime.current = true;
+          return;
+        }
+
+        if (currentPlayer.state.canPlay) {
+          hasInitializedPlaybackTime.current = seekToProcessingLiveEdge(currentPlayer);
+        }
+
+        if (hasInitializedPlaybackTime.current) return;
+
+        const unsubscribe = currentPlayer.subscribe(({ canPlay, seekableEnd }) => {
+          if (hasInitializedPlaybackTime.current || !canPlay) return;
+          if (!Number.isFinite(seekableEnd) || seekableEnd <= 0) return;
+
+          hasInitializedPlaybackTime.current = seekToProcessingLiveEdge(currentPlayer);
+        });
+
+        return unsubscribe;
+      }
+
       if (playbackData && playbackData.time != null) {
         // Resume from server-side playback progress.
-        player.current!.currentTime = playbackData.time
+        currentPlayer.currentTime = playbackData.time
         hasInitializedPlaybackTime.current = true
-      } else {
-        // Check if time is set in the url
-        const time = searchParams.get("t");
-        if (time !== null) {
-          player.current!.currentTime = parseInt(time);
-          hasInitializedPlaybackTime.current = true
-        }
+      } else if (urlStartTime !== null) {
+        currentPlayer.currentTime = urlStartTime;
+        hasInitializedPlaybackTime.current = true
       }
     }
-
-  }, [player, video, playbackData, searchParams])
+  }, [isProcessingLive, playbackData, player, urlStartTime])
 
 
   // Playback progress reporting

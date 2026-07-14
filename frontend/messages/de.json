@@ -88,7 +88,9 @@
       "showProcessingVideos": "Verarbeitende Videos in 'Kürzlich archivierte' Videos anzeigen",
       "showProcessingVideosDescription": "Verarbeitende Videos im Abschnitt 'Kürzlich archivierte' Videos auf der Startseite anzeigen.",
       "autoplayVideo": "Videos automatisch abspielen",
-      "autoplayVideoDescription": "Videos automatisch starten, wenn sie geladen sind."
+      "autoplayVideoDescription": "Videos automatisch starten, wenn sie geladen sind.",
+      "hideContinueWatching": "Weiter ansehen ausblenden",
+      "hideContinueWatchingDescription": "Blendet den Abschnitt „Weiter ansehen“ auf der Startseite aus."
     },
     "changePassword": {
       "title": "Passwort ändern",
@@ -297,8 +299,6 @@
       "twitchTokenDescription": "Gib dein Twitch-Token an, um werbefreie Live-Streams und VODs nur für Abonnenten herunterzuladen.",
       "convertFFmpegArgsLabel": "Video-Konvertierungs-FFmpeg-Argumente",
       "convertFFmpegArgsDescription": "Benutzerdefinierte FFmpeg-Argumente, die bei der Konvertierung des Videos verwendet werden sollen. Dies wird sowohl für Live- als auch für VOD-Archivierungen verwendet.",
-      "ytdlpVideoArgsLabel": "YT-DLP Video-Argumente",
-      "ytdlpVideoArgsDescription": "Benutzerdefinierte yt-dlp-Argumente zur Verwendung beim Herunterladen eines Videos. Dies wird nur für VOD-Downloads verwendet.",
       "liveStreamTitle": "Live-Stream",
       "proxySettings": "Proxy-Einstellungen",
       "proxySettingsDescription": "Archiviere Live-Streams über einen Proxy, um Werbung zu verhindern. Dein Twitch-Token wird nicht an den Proxy gesendet.",
@@ -310,7 +310,7 @@
       "whitelistChannelsLabel": "Whitelist-Kanäle",
       "whitelistChannelsDescription": "Wähle Kanäle aus, die von der Verwendung des Proxys ausgeschlossen sind, falls aktiviert. Stattdessen wird dein Twitch-Token verwendet. Wähle Kanäle aus, die du abonniert hast.",
       "watchWhileArchivingLabel": "Aktiviere Wiedergabe während des Archivierens",
-      "watchWhileArchivingDescription": "Lädt einen separaten HLS-Stream herunter, um Live-Streams während des Archivierens ansehen zu können. Dies verdoppelt den Speicherbedarf während der Live-Archivierung. Nur das Video ist abspielbar – der Chat wird nicht mit angezeigt."
+      "watchWhileArchivingDescription": "Lädt einen separaten HLS-Stream herunter, um Live-Streams während des Archivierens ansehen zu können. Dies verdoppelt den Speicherbedarf während der Live-Archivierung. Der Twitch-Live-Chat wird während der Verarbeitung eingebettet, wenn er verfügbar ist."
     },
     "chatSettings": {
       "header": "Chat-Einstellungen",
@@ -1000,6 +1000,7 @@
     "triggerLiveSuccess": "Live-Erfolg",
     "triggerError": "Fehler",
     "triggerIsLive": "Ist Live",
+    "triggerLiveEnded": "Live beendet",
     "triggersNone": "Keine",
     "actions": {
       "edit": "Bearbeiten",
@@ -1026,6 +1027,7 @@
       "triggerLiveArchiveSuccess": "Live-Archivierung erfolgreich",
       "triggerError": "Fehler",
       "triggerChannelIsLive": "Kanal ist Live",
+      "triggerChannelLiveEnded": "Kanal-Live beendet",
       "messageLabel": "Nachricht",
       "variablesLabel": "Variablen:",
       "appriseSettingsTitle": "Apprise-Einstellungen",
@@ -1061,6 +1063,7 @@
       "eventLiveSuccess": "Live-Archivierung erfolgreich",
       "eventError": "Fehler",
       "eventIsLive": "Kanal ist Live",
+      "eventLiveEnded": "Kanal-Live beendet",
       "cancelButton": "Abbrechen",
       "sendButton": "Test senden"
     },

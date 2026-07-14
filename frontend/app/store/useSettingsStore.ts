@@ -13,6 +13,7 @@ interface SettingsState {
   showAbsoluteTime: boolean;
   showChatTimestamps: boolean;
   autoplayVideo: boolean;
+  hideContinueWatching: boolean;
   setVideoLimit: (limit: number) => void;
   setAdminItemsPerPage: (limit: number) => void;
   setChatPlaybackSmoothScroll: (smooth: boolean) => void;
@@ -24,6 +25,7 @@ interface SettingsState {
   setShowAbsoluteTime: (show: boolean) => void;
   setShowChatTimestamps: (show: boolean) => void;
   setAutoplayVideo: (autoplayVideo: boolean) => void;
+  setHideContinueWatching: (hide: boolean) => void;
 }
 
 // Create the store with persist middleware
@@ -42,6 +44,7 @@ const useSettingsStore = create<SettingsState>()(
       showAbsoluteTime: false,
       showChatTimestamps: false,
       autoplayVideo: false,
+      hideContinueWatching: false,
 
       setVideoLimit: (limit: number) => set({ videoLimit: limit }),
 
@@ -70,6 +73,9 @@ const useSettingsStore = create<SettingsState>()(
 
       setAutoplayVideo: (autoplayVideo: boolean) =>
         set({ autoplayVideo }),
+
+      setHideContinueWatching: (hide: boolean) =>
+        set({ hideContinueWatching: hide }),
     }),
     {
       name: "settings-storage",
@@ -85,6 +91,7 @@ const useSettingsStore = create<SettingsState>()(
         showAbsoluteTime: state.showAbsoluteTime,
         showChatTimestamps: state.showChatTimestamps,
         autoplayVideo: state.autoplayVideo,
+        hideContinueWatching: state.hideContinueWatching,
       }),
     },
   ),

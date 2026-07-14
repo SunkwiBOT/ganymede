@@ -7105,10 +7105,12 @@ type NotificationMutation struct {
 	trigger_live_success   *bool
 	trigger_error          *bool
 	trigger_is_live        *bool
+	trigger_live_ended     *bool
 	video_success_template *string
 	live_success_template  *string
 	error_template         *string
 	is_live_template       *string
+	live_ended_template    *string
 	apprise_urls           *string
 	apprise_title          *string
 	apprise_type           *notification.AppriseType
@@ -7514,6 +7516,42 @@ func (m *NotificationMutation) ResetTriggerIsLive() {
 	m.trigger_is_live = nil
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (m *NotificationMutation) SetTriggerLiveEnded(b bool) {
+	m.trigger_live_ended = &b
+}
+
+// TriggerLiveEnded returns the value of the "trigger_live_ended" field in the mutation.
+func (m *NotificationMutation) TriggerLiveEnded() (r bool, exists bool) {
+	v := m.trigger_live_ended
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTriggerLiveEnded returns the old "trigger_live_ended" field's value of the Notification entity.
+// If the Notification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NotificationMutation) OldTriggerLiveEnded(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTriggerLiveEnded is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTriggerLiveEnded requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTriggerLiveEnded: %w", err)
+	}
+	return oldValue.TriggerLiveEnded, nil
+}
+
+// ResetTriggerLiveEnded resets all changes to the "trigger_live_ended" field.
+func (m *NotificationMutation) ResetTriggerLiveEnded() {
+	m.trigger_live_ended = nil
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (m *NotificationMutation) SetVideoSuccessTemplate(s string) {
 	m.video_success_template = &s
@@ -7656,6 +7694,42 @@ func (m *NotificationMutation) OldIsLiveTemplate(ctx context.Context) (v string,
 // ResetIsLiveTemplate resets all changes to the "is_live_template" field.
 func (m *NotificationMutation) ResetIsLiveTemplate() {
 	m.is_live_template = nil
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (m *NotificationMutation) SetLiveEndedTemplate(s string) {
+	m.live_ended_template = &s
+}
+
+// LiveEndedTemplate returns the value of the "live_ended_template" field in the mutation.
+func (m *NotificationMutation) LiveEndedTemplate() (r string, exists bool) {
+	v := m.live_ended_template
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLiveEndedTemplate returns the old "live_ended_template" field's value of the Notification entity.
+// If the Notification object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *NotificationMutation) OldLiveEndedTemplate(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLiveEndedTemplate is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLiveEndedTemplate requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLiveEndedTemplate: %w", err)
+	}
+	return oldValue.LiveEndedTemplate, nil
+}
+
+// ResetLiveEndedTemplate resets all changes to the "live_ended_template" field.
+func (m *NotificationMutation) ResetLiveEndedTemplate() {
+	m.live_ended_template = nil
 }
 
 // SetAppriseUrls sets the "apprise_urls" field.
@@ -7983,7 +8057,7 @@ func (m *NotificationMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *NotificationMutation) Fields() []string {
-	fields := make([]string, 0, 19)
+	fields := make([]string, 0, 21)
 	if m.name != nil {
 		fields = append(fields, notification.FieldName)
 	}
@@ -8008,6 +8082,9 @@ func (m *NotificationMutation) Fields() []string {
 	if m.trigger_is_live != nil {
 		fields = append(fields, notification.FieldTriggerIsLive)
 	}
+	if m.trigger_live_ended != nil {
+		fields = append(fields, notification.FieldTriggerLiveEnded)
+	}
 	if m.video_success_template != nil {
 		fields = append(fields, notification.FieldVideoSuccessTemplate)
 	}
@@ -8019,6 +8096,9 @@ func (m *NotificationMutation) Fields() []string {
 	}
 	if m.is_live_template != nil {
 		fields = append(fields, notification.FieldIsLiveTemplate)
+	}
+	if m.live_ended_template != nil {
+		fields = append(fields, notification.FieldLiveEndedTemplate)
 	}
 	if m.apprise_urls != nil {
 		fields = append(fields, notification.FieldAppriseUrls)
@@ -8065,6 +8145,8 @@ func (m *NotificationMutation) Field(name string) (ent.Value, bool) {
 		return m.TriggerError()
 	case notification.FieldTriggerIsLive:
 		return m.TriggerIsLive()
+	case notification.FieldTriggerLiveEnded:
+		return m.TriggerLiveEnded()
 	case notification.FieldVideoSuccessTemplate:
 		return m.VideoSuccessTemplate()
 	case notification.FieldLiveSuccessTemplate:
@@ -8073,6 +8155,8 @@ func (m *NotificationMutation) Field(name string) (ent.Value, bool) {
 		return m.ErrorTemplate()
 	case notification.FieldIsLiveTemplate:
 		return m.IsLiveTemplate()
+	case notification.FieldLiveEndedTemplate:
+		return m.LiveEndedTemplate()
 	case notification.FieldAppriseUrls:
 		return m.AppriseUrls()
 	case notification.FieldAppriseTitle:
@@ -8112,6 +8196,8 @@ func (m *NotificationMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldTriggerError(ctx)
 	case notification.FieldTriggerIsLive:
 		return m.OldTriggerIsLive(ctx)
+	case notification.FieldTriggerLiveEnded:
+		return m.OldTriggerLiveEnded(ctx)
 	case notification.FieldVideoSuccessTemplate:
 		return m.OldVideoSuccessTemplate(ctx)
 	case notification.FieldLiveSuccessTemplate:
@@ -8120,6 +8206,8 @@ func (m *NotificationMutation) OldField(ctx context.Context, name string) (ent.V
 		return m.OldErrorTemplate(ctx)
 	case notification.FieldIsLiveTemplate:
 		return m.OldIsLiveTemplate(ctx)
+	case notification.FieldLiveEndedTemplate:
+		return m.OldLiveEndedTemplate(ctx)
 	case notification.FieldAppriseUrls:
 		return m.OldAppriseUrls(ctx)
 	case notification.FieldAppriseTitle:
@@ -8199,6 +8287,13 @@ func (m *NotificationMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTriggerIsLive(v)
 		return nil
+	case notification.FieldTriggerLiveEnded:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTriggerLiveEnded(v)
+		return nil
 	case notification.FieldVideoSuccessTemplate:
 		v, ok := value.(string)
 		if !ok {
@@ -8226,6 +8321,13 @@ func (m *NotificationMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetIsLiveTemplate(v)
+		return nil
+	case notification.FieldLiveEndedTemplate:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLiveEndedTemplate(v)
 		return nil
 	case notification.FieldAppriseUrls:
 		v, ok := value.(string)
@@ -8370,6 +8472,9 @@ func (m *NotificationMutation) ResetField(name string) error {
 	case notification.FieldTriggerIsLive:
 		m.ResetTriggerIsLive()
 		return nil
+	case notification.FieldTriggerLiveEnded:
+		m.ResetTriggerLiveEnded()
+		return nil
 	case notification.FieldVideoSuccessTemplate:
 		m.ResetVideoSuccessTemplate()
 		return nil
@@ -8381,6 +8486,9 @@ func (m *NotificationMutation) ResetField(name string) error {
 		return nil
 	case notification.FieldIsLiveTemplate:
 		m.ResetIsLiveTemplate()
+		return nil
+	case notification.FieldLiveEndedTemplate:
+		m.ResetLiveEndedTemplate()
 		return nil
 	case notification.FieldAppriseUrls:
 		m.ResetAppriseUrls()

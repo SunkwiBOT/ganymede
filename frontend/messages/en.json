@@ -88,7 +88,9 @@
       "showProcessingVideos": "Show Processing Videos in Recently Archived Videos",
       "showProcessingVideosDescription": "Display processing videos in the 'Recently Archived' videos section on the home page.",
       "autoplayVideo": "Autoplay videos",
-      "autoplayVideoDescription": "Automatically start playing videos when they are loaded."
+      "autoplayVideoDescription": "Automatically start playing videos when they are loaded.",
+      "hideContinueWatching": "Hide Continue Watching",
+      "hideContinueWatchingDescription": "Hide the Continue Watching section on the home page."
     },
     "changePassword": {
       "title": "Change Password",
@@ -297,8 +299,6 @@
       "twitchTokenDescription": "Supply your Twitch token for downloading ad-free live streams and subscriber-only VODs.",
       "convertFFmpegArgsLabel": "Video Convert FFmpeg Arguments",
       "convertFFmpegArgsDescription": "Custom FFmpeg arguments to use when converting the video. This is used for both live and VOD archives.",
-      "ytdlpVideoArgsLabel": "YT-DLP Video Arguments",
-      "ytdlpVideoArgsDescription": "Custom yt-dlp arguments to use when downloading a video. This is only used for VOD downloads.",
       "liveStreamTitle": "Live Stream",
       "proxySettings": "Proxy Settings",
       "proxySettingsDescription": "Archive live streams through a proxy to prevent ads. Your Twitch token is not sent to the proxy.",
@@ -310,7 +310,7 @@
       "whitelistChannelsLabel": "Whitelist Channels",
       "whitelistChannelsDescription": "Select channels that are excluded from using the proxy if enabled. Instead your Twitch token will be used. Select channels that you are subscribed to.",
       "watchWhileArchivingLabel": "Enable Watching While Archiving",
-      "watchWhileArchivingDescription": "Download a separate HLS stream for watching while archiving live streams. This doubles the amount of storage used during live archiving. Only the video is watchable, chat is not included."
+      "watchWhileArchivingDescription": "Download a separate HLS stream for watching while archiving live streams. This doubles the amount of storage used during live archiving. Twitch live chat is embedded while the live archive is processing when available."
     },
     "chatSettings": {
       "header": "Chat Settings",
@@ -1000,6 +1000,7 @@
     "triggerLiveSuccess": "Live Success",
     "triggerError": "Error",
     "triggerIsLive": "Is Live",
+    "triggerLiveEnded": "Live Ended",
     "triggersNone": "None",
     "actions": {
       "edit": "Edit",
@@ -1026,6 +1027,7 @@
       "triggerLiveArchiveSuccess": "Live Archive Success",
       "triggerError": "Error",
       "triggerChannelIsLive": "Channel Is Live",
+      "triggerChannelLiveEnded": "Channel Live Ended",
       "messageLabel": "Message",
       "variablesLabel": "Variables:",
       "appriseSettingsTitle": "Apprise Settings",
@@ -1061,6 +1063,7 @@
       "eventLiveSuccess": "Live Archive Success",
       "eventError": "Error",
       "eventIsLive": "Channel Is Live",
+      "eventLiveEnded": "Channel Live Ended",
       "cancelButton": "Cancel",
       "sendButton": "Send Test"
     },

@@ -89,6 +89,26 @@ func TestTwitchConnectionAuthenticateStoresTokenAndExpiry(t *testing.T) {
 	}
 }
 
+func TestParsePlaybackAccessTokenResponseAcceptsVideoToken(t *testing.T) {
+	token, err := parsePlaybackAccessTokenResponse([]byte(`{
+		"data": {
+			"videoPlaybackAccessToken": {
+				"value": "video-token",
+				"signature": "video-signature"
+			}
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("parsePlaybackAccessTokenResponse returned error: %v", err)
+	}
+	if token.Value != "video-token" {
+		t.Fatalf("expected video token, got %q", token.Value)
+	}
+	if token.Signature != "video-signature" {
+		t.Fatalf("expected video signature, got %q", token.Signature)
+	}
+}
+
 func TestTwitchMakeHTTPRequestUsesCurrentToken(t *testing.T) {
 	withTwitchTestServers(t, func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("unexpected auth request")

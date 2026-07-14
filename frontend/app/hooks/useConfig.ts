@@ -11,7 +11,6 @@ export interface Config {
     twitch_token: string;
     video_convert: string;
     chat_render: string;
-    yt_dlp_video: string;
   };
   archive: {
     save_as_hls: boolean;

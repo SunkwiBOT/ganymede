@@ -58,8 +58,6 @@ definitions:
         type: string
       twitch_downloader:
         type: string
-      yt_dlp:
-        type: string
     type: object
   archive.TwitchVodResponse:
     properties:
@@ -275,9 +273,6 @@ definitions:
             type: string
           video_convert:
             description: FFmpeg arguments for video conversion.
-            type: string
-          yt_dlp_video:
-            description: yt-dlp arguments for video downloads.
             type: string
         type: object
       registration_enabled:
@@ -1391,6 +1386,8 @@ definitions:
         type: string
       is_live_template:
         type: string
+      live_ended_template:
+        type: string
       live_success_template:
         type: string
       name:
@@ -1398,6 +1395,8 @@ definitions:
       trigger_error:
         type: boolean
       trigger_is_live:
+        type: boolean
+      trigger_live_ended:
         type: boolean
       trigger_live_success:
         type: boolean
@@ -1439,6 +1438,8 @@ definitions:
         type: string
       is_live_template:
         type: string
+      live_ended_template:
+        type: string
       live_success_template:
         type: string
       name:
@@ -1446,6 +1447,8 @@ definitions:
       trigger_error:
         type: boolean
       trigger_is_live:
+        type: boolean
+      trigger_live_ended:
         type: boolean
       trigger_live_success:
         type: boolean
@@ -1563,6 +1566,7 @@ definitions:
         - live_success
         - error
         - is_live
+        - live_ended
         type: string
     required:
     - event_type

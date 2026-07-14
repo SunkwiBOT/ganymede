@@ -73,10 +73,12 @@ func (s *Service) CreateNotification(ctx context.Context, n *ent.Notification) (
 		SetTriggerLiveSuccess(n.TriggerLiveSuccess).
 		SetTriggerError(n.TriggerError).
 		SetTriggerIsLive(n.TriggerIsLive).
+		SetTriggerLiveEnded(n.TriggerLiveEnded).
 		SetVideoSuccessTemplate(n.VideoSuccessTemplate).
 		SetLiveSuccessTemplate(n.LiveSuccessTemplate).
 		SetErrorTemplate(n.ErrorTemplate).
 		SetIsLiveTemplate(n.IsLiveTemplate).
+		SetLiveEndedTemplate(n.LiveEndedTemplate).
 		SetAppriseUrls(n.AppriseUrls).
 		SetAppriseTitle(n.AppriseTitle).
 		SetAppriseTag(n.AppriseTag)
@@ -115,10 +117,12 @@ func (s *Service) UpdateNotification(ctx context.Context, id uuid.UUID, n *ent.N
 		SetTriggerLiveSuccess(n.TriggerLiveSuccess).
 		SetTriggerError(n.TriggerError).
 		SetTriggerIsLive(n.TriggerIsLive).
+		SetTriggerLiveEnded(n.TriggerLiveEnded).
 		SetVideoSuccessTemplate(n.VideoSuccessTemplate).
 		SetLiveSuccessTemplate(n.LiveSuccessTemplate).
 		SetErrorTemplate(n.ErrorTemplate).
 		SetIsLiveTemplate(n.IsLiveTemplate).
+		SetLiveEndedTemplate(n.LiveEndedTemplate).
 		SetAppriseUrls(n.AppriseUrls).
 		SetAppriseTitle(n.AppriseTitle).
 		SetAppriseTag(n.AppriseTag)
@@ -362,6 +366,28 @@ func (s *Service) SendLive(ctx context.Context, channelItem *ent.Channel, vodIte
 	}
 }
 
+// SendLiveEnded sends notifications to all enabled configs with trigger_live_ended.
+func (s *Service) SendLiveEnded(ctx context.Context, channelItem *ent.Channel, vodItem *ent.Vod, qItem *ent.Queue) {
+	notifications, err := s.Store.Client.Notification.Query().
+		Where(
+			entNotification.EnabledEQ(true),
+			entNotification.TriggerLiveEndedEQ(true),
+		).All(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("error querying live-ended notifications")
+		return
+	}
+
+	variableMap := getVariableMap(channelItem, vodItem, qItem, "", nil)
+
+	for _, n := range notifications {
+		body := renderTemplate(n.LiveEndedTemplate, variableMap)
+		if err := s.send(ctx, n, body, variableMap); err != nil {
+			log.Error().Err(err).Str("notification_id", n.ID.String()).Str("name", n.Name).Msg("error sending live-ended notification")
+		}
+	}
+}
+
 // SendTestNotification sends a test notification using the config's own templates with dummy data.
 func (s *Service) SendTestNotification(ctx context.Context, n *ent.Notification, eventType string) error {
 	variableMap := getTestVariableMap()
@@ -378,6 +404,8 @@ func (s *Service) SendTestNotification(ctx context.Context, n *ent.Notification,
 	case "is_live":
 		variableMap["category"] = "Demo Game"
 		tmpl = n.IsLiveTemplate
+	case "live_ended":
+		tmpl = n.LiveEndedTemplate
 	default:
 		return fmt.Errorf("unknown test notification event type: %s", eventType)
 	}

@@ -27,12 +27,14 @@ func (Notification) Fields() []ent.Field {
 		field.Bool("trigger_live_success").Default(false).Comment("Fire on live archive success."),
 		field.Bool("trigger_error").Default(false).Comment("Fire on task error."),
 		field.Bool("trigger_is_live").Default(false).Comment("Fire when a channel goes live."),
+		field.Bool("trigger_live_ended").Default(false).Comment("Fire when a channel's live stream ends."),
 
 		// Templates
 		field.String("video_success_template").MaxLen(4096).Default("✅ Video Archived: {{vod_title}} by {{channel_display_name}}.").Comment("Template for video archive success body."),
 		field.String("live_success_template").MaxLen(4096).Default("✅ Live Stream Archived: {{vod_title}} by {{channel_display_name}}.").Comment("Template for live archive success body."),
 		field.String("error_template").MaxLen(4096).Default("⚠️ Error: Queue {{queue_id}} failed at task {{failed_task}}.").Comment("Template for error body."),
 		field.String("is_live_template").MaxLen(4096).Default("🔴 {{channel_display_name}} is live!").Comment("Template for is-live body."),
+		field.String("live_ended_template").MaxLen(4096).Default("⚫ {{channel_display_name}} is offline.").Comment("Template for live-ended body."),
 
 		// Apprise-specific fields (optional, only used when type=apprise)
 		field.String("apprise_urls").Optional().Default("").MaxLen(4096).Comment("Stateless Apprise URLs parameter."),

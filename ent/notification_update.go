@@ -140,6 +140,20 @@ func (_u *NotificationUpdate) SetNillableTriggerIsLive(v *bool) *NotificationUpd
 	return _u
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (_u *NotificationUpdate) SetTriggerLiveEnded(v bool) *NotificationUpdate {
+	_u.mutation.SetTriggerLiveEnded(v)
+	return _u
+}
+
+// SetNillableTriggerLiveEnded sets the "trigger_live_ended" field if the given value is not nil.
+func (_u *NotificationUpdate) SetNillableTriggerLiveEnded(v *bool) *NotificationUpdate {
+	if v != nil {
+		_u.SetTriggerLiveEnded(*v)
+	}
+	return _u
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (_u *NotificationUpdate) SetVideoSuccessTemplate(v string) *NotificationUpdate {
 	_u.mutation.SetVideoSuccessTemplate(v)
@@ -192,6 +206,20 @@ func (_u *NotificationUpdate) SetIsLiveTemplate(v string) *NotificationUpdate {
 func (_u *NotificationUpdate) SetNillableIsLiveTemplate(v *string) *NotificationUpdate {
 	if v != nil {
 		_u.SetIsLiveTemplate(*v)
+	}
+	return _u
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (_u *NotificationUpdate) SetLiveEndedTemplate(v string) *NotificationUpdate {
+	_u.mutation.SetLiveEndedTemplate(v)
+	return _u
+}
+
+// SetNillableLiveEndedTemplate sets the "live_ended_template" field if the given value is not nil.
+func (_u *NotificationUpdate) SetNillableLiveEndedTemplate(v *string) *NotificationUpdate {
+	if v != nil {
+		_u.SetLiveEndedTemplate(*v)
 	}
 	return _u
 }
@@ -368,6 +396,11 @@ func (_u *NotificationUpdate) check() error {
 			return &ValidationError{Name: "is_live_template", err: fmt.Errorf(`ent: validator failed for field "Notification.is_live_template": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.LiveEndedTemplate(); ok {
+		if err := notification.LiveEndedTemplateValidator(v); err != nil {
+			return &ValidationError{Name: "live_ended_template", err: fmt.Errorf(`ent: validator failed for field "Notification.live_ended_template": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.AppriseUrls(); ok {
 		if err := notification.AppriseUrlsValidator(v); err != nil {
 			return &ValidationError{Name: "apprise_urls", err: fmt.Errorf(`ent: validator failed for field "Notification.apprise_urls": %w`, err)}
@@ -432,6 +465,9 @@ func (_u *NotificationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.TriggerIsLive(); ok {
 		_spec.SetField(notification.FieldTriggerIsLive, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.TriggerLiveEnded(); ok {
+		_spec.SetField(notification.FieldTriggerLiveEnded, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.VideoSuccessTemplate(); ok {
 		_spec.SetField(notification.FieldVideoSuccessTemplate, field.TypeString, value)
 	}
@@ -443,6 +479,9 @@ func (_u *NotificationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	}
 	if value, ok := _u.mutation.IsLiveTemplate(); ok {
 		_spec.SetField(notification.FieldIsLiveTemplate, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LiveEndedTemplate(); ok {
+		_spec.SetField(notification.FieldLiveEndedTemplate, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.AppriseUrls(); ok {
 		_spec.SetField(notification.FieldAppriseUrls, field.TypeString, value)
@@ -603,6 +642,20 @@ func (_u *NotificationUpdateOne) SetNillableTriggerIsLive(v *bool) *Notification
 	return _u
 }
 
+// SetTriggerLiveEnded sets the "trigger_live_ended" field.
+func (_u *NotificationUpdateOne) SetTriggerLiveEnded(v bool) *NotificationUpdateOne {
+	_u.mutation.SetTriggerLiveEnded(v)
+	return _u
+}
+
+// SetNillableTriggerLiveEnded sets the "trigger_live_ended" field if the given value is not nil.
+func (_u *NotificationUpdateOne) SetNillableTriggerLiveEnded(v *bool) *NotificationUpdateOne {
+	if v != nil {
+		_u.SetTriggerLiveEnded(*v)
+	}
+	return _u
+}
+
 // SetVideoSuccessTemplate sets the "video_success_template" field.
 func (_u *NotificationUpdateOne) SetVideoSuccessTemplate(v string) *NotificationUpdateOne {
 	_u.mutation.SetVideoSuccessTemplate(v)
@@ -655,6 +708,20 @@ func (_u *NotificationUpdateOne) SetIsLiveTemplate(v string) *NotificationUpdate
 func (_u *NotificationUpdateOne) SetNillableIsLiveTemplate(v *string) *NotificationUpdateOne {
 	if v != nil {
 		_u.SetIsLiveTemplate(*v)
+	}
+	return _u
+}
+
+// SetLiveEndedTemplate sets the "live_ended_template" field.
+func (_u *NotificationUpdateOne) SetLiveEndedTemplate(v string) *NotificationUpdateOne {
+	_u.mutation.SetLiveEndedTemplate(v)
+	return _u
+}
+
+// SetNillableLiveEndedTemplate sets the "live_ended_template" field if the given value is not nil.
+func (_u *NotificationUpdateOne) SetNillableLiveEndedTemplate(v *string) *NotificationUpdateOne {
+	if v != nil {
+		_u.SetLiveEndedTemplate(*v)
 	}
 	return _u
 }
@@ -844,6 +911,11 @@ func (_u *NotificationUpdateOne) check() error {
 			return &ValidationError{Name: "is_live_template", err: fmt.Errorf(`ent: validator failed for field "Notification.is_live_template": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.LiveEndedTemplate(); ok {
+		if err := notification.LiveEndedTemplateValidator(v); err != nil {
+			return &ValidationError{Name: "live_ended_template", err: fmt.Errorf(`ent: validator failed for field "Notification.live_ended_template": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.AppriseUrls(); ok {
 		if err := notification.AppriseUrlsValidator(v); err != nil {
 			return &ValidationError{Name: "apprise_urls", err: fmt.Errorf(`ent: validator failed for field "Notification.apprise_urls": %w`, err)}
@@ -925,6 +997,9 @@ func (_u *NotificationUpdateOne) sqlSave(ctx context.Context) (_node *Notificati
 	if value, ok := _u.mutation.TriggerIsLive(); ok {
 		_spec.SetField(notification.FieldTriggerIsLive, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.TriggerLiveEnded(); ok {
+		_spec.SetField(notification.FieldTriggerLiveEnded, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.VideoSuccessTemplate(); ok {
 		_spec.SetField(notification.FieldVideoSuccessTemplate, field.TypeString, value)
 	}
@@ -936,6 +1011,9 @@ func (_u *NotificationUpdateOne) sqlSave(ctx context.Context) (_node *Notificati
 	}
 	if value, ok := _u.mutation.IsLiveTemplate(); ok {
 		_spec.SetField(notification.FieldIsLiveTemplate, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.LiveEndedTemplate(); ok {
+		_spec.SetField(notification.FieldLiveEndedTemplate, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.AppriseUrls(); ok {
 		_spec.SetField(notification.FieldAppriseUrls, field.TypeString, value)

@@ -20,7 +20,6 @@ type InfoResp struct {
 type ProgramVersions struct {
 	FFmpeg           string `json:"ffmpeg"`
 	TwitchDownloader string `json:"twitch_downloader"`
-	YtDlp            string `json:"yt_dlp"`
 }
 
 func (s *Service) GetInfo(ctx context.Context) (InfoResp, error) {
@@ -44,12 +43,6 @@ func (s *Service) GetInfo(ctx context.Context) (InfoResp, error) {
 	}
 	programVersion.TwitchDownloader = twitchDownloaderVersion
 
-	ytdlpVersion, err := getYtDlpVersion()
-	if err != nil {
-		return resp, fmt.Errorf("error getting yt-dlp version: %v", err)
-	}
-	programVersion.YtDlp = ytdlpVersion
-
 	resp.ProgramVersions = programVersion
 	return resp, nil
 }
@@ -71,15 +64,6 @@ func getTwitchDownloaderVersion() (string, error) {
 		// TwitchDownloaderCLI throws exit status 1 on --version
 		// so we ignore the error
 		return string(out), nil
-	}
-	return string(out), nil
-}
-
-func getYtDlpVersion() (string, error) {
-	run := exec.Command("yt-dlp", "--version")
-	out, err := run.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("error getting yt-dlp version: %v", err)
 	}
 	return string(out), nil
 }
