@@ -156,12 +156,12 @@ func TestSelectTwitchVODPlaylistMapsAudioToAudioOnly(t *testing.T) {
 	}
 }
 
-func TestRewriteTwitchVODMediaPlaylistAbsolutizesWithoutChangingSegmentNames(t *testing.T) {
+func TestRewriteTwitchVODMediaPlaylistAbsolutizesAndUsesMutedSegments(t *testing.T) {
 	input := `#EXTM3U
-#EXT-X-MAP:URI="init-muted.mp4"
-#EXT-X-KEY:METHOD=AES-128,URI="../keys/key-muted.key"
+#EXT-X-MAP:URI="init-unmuted.mp4"
+#EXT-X-KEY:METHOD=AES-128,URI="../keys/key-unmuted.key"
 #EXTINF:10.0,
-segment-muted-000.ts
+segment-unmuted-000.ts
 `
 
 	output, err := rewriteTwitchVODMediaPlaylist(input, "https://cdn.example.com/vods/storage/chunked/index-dvr.m3u8")
@@ -170,7 +170,7 @@ segment-muted-000.ts
 	}
 
 	if strings.Contains(output, "-unmuted") {
-		t.Fatalf("unexpected segment name mutation in rewritten playlist:\n%s", output)
+		t.Fatalf("expected unmuted segment names to be rewritten:\n%s", output)
 	}
 
 	expectedParts := []string{

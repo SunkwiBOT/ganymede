@@ -133,6 +133,8 @@ func rewriteTwitchVODMediaPlaylist(playlistText string, playlistURI string) (str
 		return "", fmt.Errorf("invalid media playlist URI: %w", err)
 	}
 
+	playlistText = strings.ReplaceAll(playlistText, "-unmuted", "-muted")
+
 	var b strings.Builder
 	lines := strings.SplitAfter(playlistText, "\n")
 	for _, line := range lines {
