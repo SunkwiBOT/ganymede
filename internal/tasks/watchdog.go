@@ -186,6 +186,53 @@ func recoverOrphanedLiveVideoArchives(ctx context.Context, store *database.Datab
 		}
 	}
 
+	if err := cleanupEmptyFailedLiveArchives(ctx, store, riverClient); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func cleanupEmptyFailedLiveArchives(ctx context.Context, store *database.Database, riverClient *river.Client[pgx.Tx]) error {
+	candidates, err := store.Client.Queue.Query().
+		Where(
+			entQueue.LiveArchive(true),
+			entQueue.Processing(true),
+			entQueue.Or(
+				entQueue.TaskVideoDownloadEQ(utils.Failed),
+				entQueue.TaskVideoConvertEQ(utils.Failed),
+			),
+		).
+		All(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, q := range candidates {
+		dbItems, err := getDatabaseItems(ctx, store.Client, q.ID)
+		if err != nil {
+			log.Warn().Err(err).Str("queue_id", q.ID.String()).Msg("failed to load failed live archive queue for empty-media cleanup")
+			continue
+		}
+
+		if err := validateRecoverableLiveVideoInput(&dbItems.Video); err == nil {
+			log.Debug().
+				Str("queue_id", q.ID.String()).
+				Str("video_id", dbItems.Video.ID.String()).
+				Msg("failed live archive still has captured media; keeping queue for retry/manual fix")
+			continue
+		}
+
+		log.Info().
+			Err(err).
+			Str("queue_id", q.ID.String()).
+			Str("video_id", dbItems.Video.ID.String()).
+			Msg("failed live archive has no captured media; cleaning up empty queue and files")
+		if err := cleanupEmptyLiveArchive(ctx, store, riverClient, dbItems); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -227,19 +274,12 @@ func recoverInterruptedLiveVideoArchive(ctx context.Context, store *database.Dat
 	}
 
 	if err := validateRecoverableLiveVideoInput(&dbItems.Video); err != nil {
-		log.Error().
+		log.Info().
 			Err(err).
 			Str("queue_id", queueID.String()).
 			Str("video_id", dbItems.Video.ID.String()).
-			Msg("live video archive recovery skipped because captured media is missing or empty")
-		if err := setWatchChannelAsNotLive(ctx, store, dbItems.Channel.ID); err != nil {
-			return err
-		}
-		return setQueueStatus(ctx, store.Client, QueueStatusInput{
-			Status:  utils.Failed,
-			QueueId: queueID,
-			Task:    utils.TaskDownloadVideo,
-		})
+			Msg("live video archive recovery found no captured media; cleaning up empty queue and files")
+		return cleanupEmptyLiveArchive(ctx, store, riverClient, dbItems)
 	}
 
 	if err := setWatchChannelAsNotLive(ctx, store, dbItems.Channel.ID); err != nil {
@@ -306,6 +346,12 @@ func validateRecoverableLiveVideoInput(video *ent.Vod) error {
 	}
 
 	if video.TmpVideoConvertPath != "" && utils.FileExists(video.TmpVideoConvertPath) {
+		if nonEmptyFileExists(video.TmpVideoConvertPath) {
+			return nil
+		}
+		if nonEmptyFileExists(video.TmpVideoDownloadPath) {
+			return nil
+		}
 		return validateNonEmptyFile(video.TmpVideoConvertPath, "live converted video input")
 	}
 

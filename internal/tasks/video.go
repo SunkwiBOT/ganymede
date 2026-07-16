@@ -146,6 +146,14 @@ func validateNonEmptyFile(path string, label string) error {
 	return nil
 }
 
+func nonEmptyFileExists(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
 func (w PostProcessVideoWorker) Work(ctx context.Context, job *river.Job[PostProcessVideoArgs]) error {
 	// get store from context
 	store, err := StoreFromContext(ctx)
@@ -180,19 +188,15 @@ func (w PostProcessVideoWorker) Work(ctx context.Context, job *river.Job[PostPro
 			return err
 		}
 	} else {
-		if dbItems.Video.VideoHlsPath == "" {
-			// Live archive finalizing to MP4 can be retried after remux succeeded.
-			// Accept either the original live temp input or the remuxed MP4 intermediate.
-			if utils.FileExists(dbItems.Video.TmpVideoConvertPath) {
-				if err := validateNonEmptyFile(dbItems.Video.TmpVideoConvertPath, "live converted video input"); err != nil {
-					return err
-				}
-			} else {
-				if err := validateNonEmptyFile(dbItems.Video.TmpVideoDownloadPath, "live downloaded video input"); err != nil {
-					return err
-				}
-			}
-		} else {
+		if err := validateRecoverableLiveVideoInput(&dbItems.Video); err != nil {
+			log.Info().
+				Err(err).
+				Str("queue_id", job.Args.Input.QueueId.String()).
+				Str("video_id", dbItems.Video.ID.String()).
+				Msg("live archive post-process has no captured video input; cleaning up queue and files")
+			return cleanupEmptyLiveArchive(ctx, store, river.ClientFromContext[pgx.Tx](ctx), dbItems, job.ID)
+		}
+		if dbItems.Video.VideoHlsPath != "" {
 			playlistPath := fmt.Sprintf("%s/%s-video.m3u8", dbItems.Video.TmpVideoHlsPath, dbItems.Video.ExtID)
 			if err := validateNonEmptyFile(playlistPath, "live HLS playlist"); err != nil {
 				return err
@@ -211,11 +215,12 @@ func (w PostProcessVideoWorker) Work(ctx context.Context, job *river.Job[PostPro
 	// Live archive MP4 retries must be idempotent. If the remux output already exists and
 	// is valid, skip rerunning post-process so retries still succeed after TS source cleanup.
 	if dbItems.Queue.LiveArchive && dbItems.Video.VideoHlsPath == "" {
-		if utils.FileExists(dbItems.Video.TmpVideoConvertPath) {
-			if err := validateNonEmptyFile(dbItems.Video.TmpVideoConvertPath, "live finalized MP4 output"); err != nil {
-				return err
-			}
+		if nonEmptyFileExists(dbItems.Video.TmpVideoConvertPath) {
 			shouldPostProcessVideo = false
+		} else if utils.FileExists(dbItems.Video.TmpVideoConvertPath) && nonEmptyFileExists(dbItems.Video.TmpVideoDownloadPath) {
+			if err := utils.DeleteFile(dbItems.Video.TmpVideoConvertPath); err != nil {
+				log.Warn().Err(err).Str("path", dbItems.Video.TmpVideoConvertPath).Msg("failed to delete invalid live finalized MP4 output before retry")
+			}
 		}
 	}
 

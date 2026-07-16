@@ -96,13 +96,23 @@ func (w DownloadLiveVideoWorker) Work(ctx context.Context, job *river.Job[Downlo
 	// (cancel live chat, mark channel not live, enqueue post-process) so partial archive
 	// can still be completed/moved instead of being left in a stuck state.
 	downloadErr := exec.DownloadTwitchLiveVideo(ctx, dbItems.Video, dbItems.Channel, startChatDownload)
+	streamEndedNaturally := downloadErr == nil
+	streamEndedForNotification := streamEndedNaturally
 	if downloadErr != nil {
 		if errors.Is(downloadErr, context.Canceled) {
-			// create new context to finish the task
-			ctx = context.Background()
+			// Detach cancellation while preserving task-scoped services stored in context.
+			ctx = context.WithoutCancel(ctx)
 		} else {
+			if platformSvc, platformErr := PlatformFromContext(ctx); platformErr == nil {
+				isLive, liveErr := platformSvc.CheckIfStreamIsLive(context.WithoutCancel(ctx), dbItems.Channel.Name)
+				if liveErr != nil {
+					log.Warn().Err(liveErr).Str("channel", dbItems.Channel.Name).Msg("error checking live status after live video download failure")
+				} else if !isLive {
+					streamEndedForNotification = true
+				}
+			}
 			// keep task context alive to perform graceful shutdown/finalization
-			ctx = context.Background()
+			ctx = context.WithoutCancel(ctx)
 			log.Error().Err(downloadErr).Str("queue_id", job.Args.Input.QueueId.String()).Msg("live video download failed; continuing with archive finalization")
 		}
 	}
@@ -133,8 +143,21 @@ func (w DownloadLiveVideoWorker) Work(ctx context.Context, job *river.Job[Downlo
 	}
 
 	// mark channel as not live
-	if err := setWatchChannelAsNotLive(ctx, store, dbItems.Channel.ID); err != nil {
+	wentOffline, err := setWatchChannelAsNotLiveWithTransition(ctx, store, dbItems.Channel.ID)
+	if err != nil {
 		return err
+	}
+	if streamEndedForNotification && wentOffline {
+		sendLiveEndedNotification(ctx, dbItems)
+	}
+
+	if err := validateRecoverableLiveVideoInput(&dbItems.Video); err != nil {
+		log.Info().
+			Err(err).
+			Str("queue_id", job.Args.Input.QueueId.String()).
+			Str("video_id", dbItems.Video.ID.String()).
+			Msg("live archive ended without captured video input; cleaning up queue and files")
+		return cleanupEmptyLiveArchive(ctx, store, client, dbItems, job.ID)
 	}
 
 	// keep download task as success so downstream finalize tasks can run and complete archive.

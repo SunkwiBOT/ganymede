@@ -253,6 +253,86 @@ func checkIfTasksAreDone(ctx context.Context, entClient *ent.Client, input Archi
 	return nil
 }
 
+func cleanupEmptyLiveArchive(ctx context.Context, store *database.Database, riverClient *river.Client[pgx.Tx], dbItems *GetDatabaseItemsResponse, excludeJobIDs ...int64) error {
+	if dbItems == nil {
+		return errors.New("database items are nil")
+	}
+
+	if riverClient != nil {
+		if err := cancelArchiveJobsForQueue(ctx, riverClient, dbItems.Queue.ID, excludeJobIDs...); err != nil {
+			return err
+		}
+	}
+
+	if err := setWatchChannelAsNotLive(ctx, store, dbItems.Channel.ID); err != nil {
+		return err
+	}
+
+	log.Info().
+		Str("queue_id", dbItems.Queue.ID.String()).
+		Str("video_id", dbItems.Video.ID.String()).
+		Str("channel", dbItems.Channel.Name).
+		Msg("deleting empty live archive with no captured video input")
+
+	if err := vods_utility.DeleteVod(ctx, store, dbItems.Video.ID, true); err != nil {
+		return fmt.Errorf("failed to delete empty live archive: %w", err)
+	}
+
+	return nil
+}
+
+func cancelArchiveJobsForQueue(ctx context.Context, client *river.Client[pgx.Tx], queueID uuid.UUID, excludeJobIDs ...int64) error {
+	if client == nil || queueID == uuid.Nil {
+		return nil
+	}
+
+	excluded := make(map[int64]bool, len(excludeJobIDs))
+	for _, jobID := range excludeJobIDs {
+		excluded[jobID] = true
+	}
+
+	params := river.NewJobListParams().States(
+		rivertype.JobStateAvailable,
+		rivertype.JobStatePending,
+		rivertype.JobStateScheduled,
+		rivertype.JobStateRunning,
+		rivertype.JobStateRetryable,
+	).First(10000)
+	jobs, err := client.JobList(ctx, params)
+	if err != nil {
+		return err
+	}
+
+	for _, job := range jobs.Jobs {
+		if excluded[job.ID] || !utils.Contains(job.Tags, archive_tag) {
+			continue
+		}
+
+		var args RiverJobArgs
+		if err := json.Unmarshal(job.EncodedArgs, &args); err != nil {
+			log.Warn().Err(err).Int64("job_id", job.ID).Msg("failed to unmarshal job arguments while cleaning up empty live archive")
+			continue
+		}
+		if args.Input.QueueId != queueID {
+			continue
+		}
+
+		cancelledJob, err := client.JobCancel(ctx, job.ID)
+		if err != nil {
+			if errors.Is(err, rivertype.ErrNotFound) {
+				log.Debug().Int64("job_id", job.ID).Str("queue_id", queueID.String()).Msg("archive job already gone while cleaning up empty live archive")
+				continue
+			}
+			return fmt.Errorf("failed to cancel archive job %d for queue %s: %w", job.ID, queueID, err)
+		}
+		if cancelledJob.State == rivertype.JobStateRunning {
+			return fmt.Errorf("archive job %d for queue %s is still running after cancellation request", job.ID, queueID)
+		}
+	}
+
+	return nil
+}
+
 // forceJobRetry forces a job to be retried. River's retry function does not touch running jobs, so we have to do it ourselves.
 func forceJobRetry(ctx context.Context, conn *pgxpool.Pool, id int64) error {
 	query := `
@@ -488,23 +568,59 @@ func (*CustomErrorHandler) HandlePanic(ctx context.Context, job *rivertype.JobRo
 
 // setWatchChannelAsNotLive marks the watched channel as not live
 func setWatchChannelAsNotLive(ctx context.Context, store *database.Database, channelId uuid.UUID) error {
-	watchedChannel, err := store.Client.Live.Query().Where(entLive.HasChannelWith(entChannel.ID(channelId))).Only(ctx)
+	_, err := setWatchChannelAsNotLiveWithTransition(ctx, store, channelId)
+	return err
+}
+
+func setWatchChannelAsNotLiveWithTransition(ctx context.Context, store *database.Database, channelId uuid.UUID) (bool, error) {
+	updated, err := store.Client.Live.Update().
+		Where(
+			entLive.HasChannelWith(entChannel.ID(channelId)),
+			entLive.IsLiveEQ(true),
+		).
+		SetIsLive(false).
+		SetLastLive(time.Now()).
+		Save(ctx)
 	if err != nil {
-		if _, ok := err.(*ent.NotFoundError); ok {
-			log.Debug().Str("channel_id", channelId.String()).Msg("watched channel not found")
-		} else {
-			return err
-		}
-	}
-	// mark channel as not live if it exists
-	if watchedChannel != nil {
-		err = store.Client.Live.UpdateOneID(watchedChannel.ID).SetIsLive(false).Exec(ctx)
-		if err != nil {
-			return err
-		}
+		return false, err
 	}
 
-	return nil
+	if updated > 0 {
+		return true, nil
+	}
+
+	exists, err := store.Client.Live.Query().
+		Where(entLive.HasChannelWith(entChannel.ID(channelId))).
+		Exist(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !exists {
+		log.Debug().Str("channel_id", channelId.String()).Msg("watched channel not found")
+	}
+
+	return false, nil
+}
+
+func sendLiveEndedNotification(ctx context.Context, dbItems *GetDatabaseItemsResponse) {
+	notifSvc, err := NotificationServiceFromContext(ctx)
+	if err != nil {
+		return
+	}
+
+	notifCtx := context.WithoutCancel(ctx)
+	channelItem := dbItems.Channel
+	vodItem := dbItems.Video
+	queueItem := dbItems.Queue
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in SendLiveEnded notification")
+			}
+		}()
+		notifSvc.SendLiveEnded(notifCtx, &channelItem, &vodItem, &queueItem)
+	}()
 }
 
 // Update video storage usage

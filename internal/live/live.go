@@ -410,13 +410,26 @@ OUTER:
 				}
 
 				// check if stream is already being archived
-				queueItems, err := database.DB().Client.Queue.Query().Where(entQueue.Processing(true)).WithVod().All(ctx)
+				queueItems, err := s.Store.Client.Queue.Query().Where(entQueue.Processing(true)).WithVod().All(ctx)
 				if err != nil {
 					log.Error().Err(err).Msg("error getting queue items")
 				}
 				for _, queueItem := range queueItems {
-					if queueItem.Edges.Vod.ExtID == stream.ID && queueItem.TaskVideoDownload == utils.Running {
-						log.Debug().Msgf("%s is already being archived", lwc.Edges.Channel.Name)
+					if queueItem.Edges.Vod == nil {
+						continue
+					}
+					if queue.IsActiveLiveCaptureQueue(queueItem) &&
+						(queueItem.Edges.Vod.ExtStreamID == stream.ID || queueItem.Edges.Vod.ExtID == stream.ID) {
+						_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
+						if err != nil {
+							log.Error().Err(err).Msg("error updating live watched channel")
+						}
+						log.Debug().
+							Str("channel", lwc.Edges.Channel.Name).
+							Str("stream_id", stream.ID).
+							Str("queue_id", queueItem.ID.String()).
+							Str("video_id", queueItem.Edges.Vod.ID.String()).
+							Msg("stream is already being archived")
 						continue OUTER
 					}
 				}
@@ -437,7 +450,7 @@ OUTER:
 				}
 
 				// Archive stream
-				_, err = s.ArchiveService.ArchiveLivestream(ctx, archive.ArchiveVideoInput{
+				archiveResponse, err := s.ArchiveService.ArchiveLivestream(ctx, archive.ArchiveVideoInput{
 					ChannelId:   lwc.Edges.Channel.ID,
 					Quality:     utils.VodQuality(lwc.Resolution),
 					ArchiveChat: lwc.ArchiveChat,
@@ -446,6 +459,19 @@ OUTER:
 				if err != nil {
 					log.Error().Err(err).Msg("error archiving twitch livestream")
 					continue
+				}
+				if !archiveResponse.Created {
+					_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
+					if err != nil {
+						log.Error().Err(err).Msg("error updating live watched channel")
+					}
+					log.Debug().
+						Str("channel", lwc.Edges.Channel.Name).
+						Str("stream_id", stream.ID).
+						Str("queue_id", archiveResponse.Queue.ID.String()).
+						Str("video_id", archiveResponse.Video.ID.String()).
+						Msg("livestream archive already active; skipping start notification and initial chapter")
+					continue OUTER
 				}
 
 				// Stream is online and archive started, update database
@@ -491,10 +517,21 @@ OUTER:
 		} else {
 			if lwc.IsLive {
 				log.Debug().Msgf("%s is now offline", lwc.Edges.Channel.Name)
-				// Stream is offline, update database
-				_, err := s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(false).SetLastLive(time.Now()).Save(ctx)
+				// Stream is offline, update database. Use a conditional update so a concurrent
+				// live archive finalizer cannot cause duplicate live-ended notifications.
+				updated, err := s.Store.Client.Live.Update().
+					Where(
+						live.ID(lwc.ID),
+						live.IsLiveEQ(true),
+					).
+					SetIsLive(false).
+					SetLastLive(time.Now()).
+					Save(ctx)
 				if err != nil {
 					log.Error().Err(err).Msg("error updating live watched channel")
+					continue OUTER
+				}
+				if updated == 0 {
 					continue OUTER
 				}
 				if s.NotificationService != nil {

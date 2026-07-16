@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"github.com/zibbp/ganymede/ent"
+	entChannel "github.com/zibbp/ganymede/ent/channel"
+	entVod "github.com/zibbp/ganymede/ent/vod"
 	"github.com/zibbp/ganymede/internal/blocked"
 	"github.com/zibbp/ganymede/internal/channel"
 	"github.com/zibbp/ganymede/internal/config"
@@ -37,8 +39,9 @@ type TwitchVodResponse struct {
 }
 
 type ArchiveResponse struct {
-	Queue *ent.Queue `json:"queue"`
-	Video *ent.Vod   `json:"video"`
+	Queue   *ent.Queue `json:"queue"`
+	Video   *ent.Vod   `json:"video"`
+	Created bool       `json:"created"`
 }
 
 func NewService(store *database.Database, channelService *channel.Service, vodService *vod.Service, queueService *queue.Service, blockedVodService *blocked.Service, riverClient *tasks_client.RiverClient, platformTwitch platform.Platform) *Service {
@@ -316,8 +319,9 @@ func (s *Service) ArchiveVideo(ctx context.Context, input ArchiveVideoInput) (*A
 	}
 
 	return &ArchiveResponse{
-		Queue: q,
-		Video: v,
+		Queue:   q,
+		Video:   v,
+		Created: true,
 	}, nil
 }
 
@@ -531,8 +535,9 @@ func (s *Service) ArchiveClip(ctx context.Context, input ArchiveClipInput) (*Arc
 	}
 
 	return &ArchiveResponse{
-		Queue: q,
-		Video: v,
+		Queue:   q,
+		Video:   v,
+		Created: true,
 	}, nil
 }
 
@@ -548,6 +553,37 @@ func (s *Service) ArchiveLivestream(ctx context.Context, input ArchiveVideoInput
 	video, err := s.PlatformTwitch.GetLiveStream(context.Background(), channel.Name)
 	if err != nil {
 		return nil, err
+	}
+
+	existingVods, err := s.Store.Client.Vod.Query().
+		Where(
+			entVod.HasChannelWith(entChannel.ID(channel.ID)),
+			entVod.TypeEQ(utils.Live),
+			entVod.Or(
+				entVod.ExtStreamIDEQ(video.ID),
+				entVod.ExtIDEQ(video.ID),
+			),
+		).
+		WithQueue().
+		Order(ent.Desc(entVod.FieldCreatedAt)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error checking existing livestream archives: %v", err)
+	}
+	for _, existingVod := range existingVods {
+		if queue.IsActiveLiveCaptureQueue(existingVod.Edges.Queue) {
+			log.Info().
+				Str("channel", channel.Name).
+				Str("stream_id", video.ID).
+				Str("video_id", existingVod.ID.String()).
+				Str("queue_id", existingVod.Edges.Queue.ID.String()).
+				Msg("active livestream archive already exists; reusing existing queue item")
+			return &ArchiveResponse{
+				Queue:   existingVod.Edges.Queue,
+				Video:   existingVod,
+				Created: false,
+			}, nil
+		}
 	}
 
 	// Generate Ganymede video ID for directory and file naming
@@ -705,7 +741,8 @@ func (s *Service) ArchiveLivestream(ctx context.Context, input ArchiveVideoInput
 	}
 
 	return &ArchiveResponse{
-		Queue: q,
-		Video: v,
+		Queue:   q,
+		Video:   v,
+		Created: true,
 	}, nil
 }

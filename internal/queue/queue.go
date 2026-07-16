@@ -61,6 +61,21 @@ type Queue struct {
 	CreatedAt                time.Time        `json:"created_at"`
 }
 
+func IsActiveLiveCaptureQueue(q *ent.Queue) bool {
+	if q == nil || !q.LiveArchive || !q.Processing {
+		return false
+	}
+
+	if q.TaskVodCreateFolder == utils.Failed ||
+		q.TaskVodDownloadThumbnail == utils.Failed ||
+		q.TaskVodSaveInfo == utils.Failed ||
+		q.TaskVideoDownload == utils.Failed {
+		return false
+	}
+
+	return q.TaskVideoDownload == utils.Pending || q.TaskVideoDownload == utils.Running
+}
+
 func (s *Service) CreateQueueItem(queueDto Queue, vID uuid.UUID) (*ent.Queue, error) {
 	if queueDto.LiveArchive {
 		q, err := s.Store.Client.Queue.Create().SetVodID(vID).SetLiveArchive(true).SetArchiveChat(queueDto.ArchiveChat).SetRenderChat(queueDto.RenderChat).Save(context.Background())
