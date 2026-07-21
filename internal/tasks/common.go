@@ -104,12 +104,60 @@ func (w CreateDirectoryWorker) Work(ctx context.Context, job *river.Job[CreateDi
 	// continue with next job
 	if job.Args.Continue {
 		client := river.ClientFromContext[pgx.Tx](ctx)
-		_, err := client.Insert(ctx, &SaveVideoInfoArgs{
-			Continue: true,
-			Input:    job.Args.Input,
-		}, nil)
-		if err != nil {
-			return err
+		if dbItems.Queue.LiveArchive {
+			_, err := client.Insert(ctx, &SaveVideoInfoArgs{
+				Continue: false,
+				Input:    job.Args.Input,
+			}, nil)
+			if err != nil {
+				return err
+			}
+
+			_, err = client.Insert(ctx, &DownloadThumbnailArgs{
+				Continue: false,
+				Input:    job.Args.Input,
+			}, nil)
+			if err != nil {
+				return err
+			}
+
+			_, err = client.Insert(ctx, &DownloadLiveVideoArgs{
+				Continue: true,
+				Input:    job.Args.Input,
+			}, nil)
+			if err != nil {
+				return err
+			}
+
+			hasLive, err := store.Client.Channel.Query().Where(entChannel.ID(dbItems.Channel.ID)).QueryLive().Exist(ctx)
+			if err != nil {
+				return err
+			}
+			if hasLive {
+				watchedChannel, err := dbItems.Channel.QueryLive().First(ctx)
+				if err != nil {
+					return err
+				}
+				if watchedChannel.UpdateMetadataMinutes > 0 {
+					_, err = client.Insert(ctx, &UpdateLiveStreamMetadataArgs{
+						Continue: false,
+						Input:    job.Args.Input,
+					}, &river.InsertOpts{
+						ScheduledAt: time.Now().Add(time.Duration(watchedChannel.UpdateMetadataMinutes) * time.Minute),
+					})
+					if err != nil {
+						return err
+					}
+				}
+			}
+		} else {
+			_, err := client.Insert(ctx, &SaveVideoInfoArgs{
+				Continue: true,
+				Input:    job.Args.Input,
+			}, nil)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

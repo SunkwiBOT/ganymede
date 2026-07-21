@@ -67,8 +67,6 @@ func IsActiveLiveCaptureQueue(q *ent.Queue) bool {
 	}
 
 	if q.TaskVodCreateFolder == utils.Failed ||
-		q.TaskVodDownloadThumbnail == utils.Failed ||
-		q.TaskVodSaveInfo == utils.Failed ||
 		q.TaskVideoDownload == utils.Failed {
 		return false
 	}

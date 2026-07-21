@@ -166,7 +166,13 @@ func recoverOrphanedLiveVideoArchives(ctx context.Context, store *database.Datab
 		Where(
 			entQueue.LiveArchive(true),
 			entQueue.Processing(true),
-			entQueue.TaskVideoDownloadEQ(utils.Running),
+			entQueue.Or(
+				entQueue.TaskVideoDownloadEQ(utils.Running),
+				entQueue.And(
+					entQueue.TaskVideoDownloadEQ(utils.Pending),
+					entQueue.TaskVodCreateFolderEQ(utils.Success),
+				),
+			),
 		).
 		All(ctx)
 	if err != nil {
@@ -181,6 +187,21 @@ func recoverOrphanedLiveVideoArchives(ctx context.Context, store *database.Datab
 		log.Info().
 			Str("queue_id", q.ID.String()).
 			Msg("detected orphaned live video archive queue with no active download job; attempting recovery")
+		if q.TaskVideoDownload == utils.Pending {
+			_, err = riverClient.Insert(ctx, &DownloadLiveVideoArgs{
+				Continue: true,
+				Input: ArchiveVideoInput{
+					QueueId: q.ID,
+				},
+			}, nil)
+			if err != nil {
+				return err
+			}
+			log.Info().
+				Str("queue_id", q.ID.String()).
+				Msg("queued missing live video download job")
+			continue
+		}
 		if err := recoverInterruptedLiveVideoArchive(ctx, store, riverClient, q.ID); err != nil {
 			return err
 		}

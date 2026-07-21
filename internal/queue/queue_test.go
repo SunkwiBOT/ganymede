@@ -41,12 +41,22 @@ func TestIsActiveLiveCaptureQueue(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "failed setup does not block recovery",
+			name: "failed metadata still blocks duplicate capture while download is pending",
 			q: &ent.Queue{
 				LiveArchive:              true,
 				Processing:               true,
 				TaskVodDownloadThumbnail: utils.Failed,
 				TaskVideoDownload:        utils.Pending,
+			},
+			want: true,
+		},
+		{
+			name: "failed create folder does not block recovery",
+			q: &ent.Queue{
+				LiveArchive:         true,
+				Processing:          true,
+				TaskVodCreateFolder: utils.Failed,
+				TaskVideoDownload:   utils.Pending,
 			},
 			want: false,
 		},
