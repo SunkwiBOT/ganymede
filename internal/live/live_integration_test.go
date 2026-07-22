@@ -80,6 +80,69 @@ func (f fakeLivePlatform) GetStreams(ctx context.Context, limit int) ([]platform
 	return []platform.LiveStreamInfo{f.stream}, nil
 }
 
+func TestCheckRestartsMissingArchiveWhenChannelIsStillMarkedLive(t *testing.T) {
+	app, err := tests.Setup(t)
+	require.NoError(t, err)
+
+	ctx := t.Context()
+	stream := platform.LiveStreamInfo{
+		ID:           "stream-missing-archive",
+		UserID:       "channel-missing-archive",
+		UserLogin:    "missingarchive",
+		UserName:     "MissingArchive",
+		GameID:       "game-missing-archive",
+		GameName:     "Just Chatting",
+		Type:         string(utils.Live),
+		Title:        "Recording interrupted",
+		ViewerCount:  42,
+		StartedAt:    time.Now().Add(-5 * time.Minute),
+		Language:     "en",
+		ThumbnailURL: "https://example.invalid/thumb.jpg",
+	}
+	fakePlatform := fakeLivePlatform{stream: stream}
+	app.PlatformTwitch = fakePlatform
+	app.LiveService.PlatformTwitch = fakePlatform
+	app.ArchiveService.PlatformTwitch = fakePlatform
+
+	channel, err := app.Database.Client.Channel.Create().
+		SetExtID(stream.UserID).
+		SetName(stream.UserLogin).
+		SetDisplayName(stream.UserName).
+		SetImagePath("/tmp/missingarchive-profile.png").
+		Save(ctx)
+	require.NoError(t, err)
+
+	watchedChannel, err := app.Database.Client.Live.Create().
+		SetChannelID(channel.ID).
+		SetWatchLive(true).
+		SetArchiveChat(false).
+		SetRenderChat(false).
+		SetResolution("best").
+		SetVodResolution("best").
+		SetIsLive(true).
+		Save(ctx)
+	require.NoError(t, err)
+
+	err = app.LiveService.Check(ctx)
+	require.NoError(t, err)
+
+	watchedChannel, err = app.Database.Client.Live.Get(ctx, watchedChannel.ID)
+	require.NoError(t, err)
+	assert.True(t, watchedChannel.IsLive)
+
+	vodCount, err := app.Database.Client.Vod.Query().
+		Where(vod.ExtStreamID(stream.ID)).
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, vodCount)
+
+	queueCount, err := app.Database.Client.Queue.Query().
+		Where(entQueue.HasVodWith(vod.ExtStreamID(stream.ID))).
+		Count(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 1, queueCount)
+}
+
 func TestCheckReusesActiveLiveArchiveWithoutDuplicateStart(t *testing.T) {
 	app, err := tests.Setup(t)
 	require.NoError(t, err)

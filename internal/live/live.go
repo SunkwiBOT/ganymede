@@ -318,12 +318,22 @@ func (s *Service) Check(ctx context.Context) error {
 		streams = append(streams, twitchStreams...)
 	}
 
+	processingQueueItems, err := s.Store.Client.Queue.Query().
+		Where(entQueue.Processing(true)).
+		WithVod().
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting active queue items: %v", err)
+	}
+
 	// check if live stream is online
 OUTER:
 	for _, lwc := range liveWatchedChannels {
 		// Check if LWC is in twitchStreams.Data
 		stream := channelInLiveStreamInfo(lwc.Edges.Channel.ExtID, streams)
 		if len(stream.ID) > 0 {
+			wasAlreadyLive := lwc.IsLive
+
 			// Build map of channel watched categories
 			watchedChannelCategories := make(map[string]struct{}, len(lwc.Edges.Categories))
 			categoryNamesForLog := make([]string, 0, len(lwc.Edges.Categories))
@@ -362,7 +372,19 @@ OUTER:
 				log.Error().Err(err).Msg("error updating live stream archive chapter")
 			}
 
-			if !lwc.IsLive {
+			var activeQueueItem *ent.Queue
+			for _, queueItem := range processingQueueItems {
+				if queueItem.Edges.Vod == nil {
+					continue
+				}
+				if queue.IsActiveLiveCaptureQueue(queueItem) &&
+					(queueItem.Edges.Vod.ExtStreamID == stream.ID || queueItem.Edges.Vod.ExtID == stream.ID) {
+					activeQueueItem = queueItem
+					break
+				}
+			}
+
+			if !lwc.IsLive || activeQueueItem == nil {
 				// stream is live
 				log.Debug().Str("channel", lwc.Edges.Channel.Name).Msg("stream is live; checking for restrictions before archiving")
 
@@ -410,28 +432,25 @@ OUTER:
 				}
 
 				// check if stream is already being archived
-				queueItems, err := s.Store.Client.Queue.Query().Where(entQueue.Processing(true)).WithVod().All(ctx)
-				if err != nil {
-					log.Error().Err(err).Msg("error getting queue items")
+				if activeQueueItem != nil {
+					_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
+					if err != nil {
+						log.Error().Err(err).Msg("error updating live watched channel")
+					}
+					log.Debug().
+						Str("channel", lwc.Edges.Channel.Name).
+						Str("stream_id", stream.ID).
+						Str("queue_id", activeQueueItem.ID.String()).
+						Str("video_id", activeQueueItem.Edges.Vod.ID.String()).
+						Msg("stream is already being archived")
+					continue OUTER
 				}
-				for _, queueItem := range queueItems {
-					if queueItem.Edges.Vod == nil {
-						continue
-					}
-					if queue.IsActiveLiveCaptureQueue(queueItem) &&
-						(queueItem.Edges.Vod.ExtStreamID == stream.ID || queueItem.Edges.Vod.ExtID == stream.ID) {
-						_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
-						if err != nil {
-							log.Error().Err(err).Msg("error updating live watched channel")
-						}
-						log.Debug().
-							Str("channel", lwc.Edges.Channel.Name).
-							Str("stream_id", stream.ID).
-							Str("queue_id", queueItem.ID.String()).
-							Str("video_id", queueItem.Edges.Vod.ID.String()).
-							Msg("stream is already being archived")
-						continue OUTER
-					}
+
+				if wasAlreadyLive {
+					log.Warn().
+						Str("channel", lwc.Edges.Channel.Name).
+						Str("stream_id", stream.ID).
+						Msg("stream is marked live without an active archive; starting a replacement")
 				}
 
 				// Check if the stream is really live or if the API is just slow to update (GH#760)
@@ -489,7 +508,7 @@ OUTER:
 					log.Error().Err(err).Msg("error getting vod")
 					continue
 				}
-				if s.NotificationService != nil {
+				if s.NotificationService != nil && !wasAlreadyLive {
 					// Use a detached context so the notification is not cancelled when the parent context ends
 					notifCtx := context.WithoutCancel(ctx)
 					go func() {
