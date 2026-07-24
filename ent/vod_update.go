@@ -181,27 +181,6 @@ func (_u *VodUpdate) ClearClipVodOffset() *VodUpdate {
 	return _u
 }
 
-// SetViews sets the "views" field.
-func (_u *VodUpdate) SetViews(v int) *VodUpdate {
-	_u.mutation.ResetViews()
-	_u.mutation.SetViews(v)
-	return _u
-}
-
-// SetNillableViews sets the "views" field if the given value is not nil.
-func (_u *VodUpdate) SetNillableViews(v *int) *VodUpdate {
-	if v != nil {
-		_u.SetViews(*v)
-	}
-	return _u
-}
-
-// AddViews adds value to the "views" field.
-func (_u *VodUpdate) AddViews(v int) *VodUpdate {
-	_u.mutation.AddViews(v)
-	return _u
-}
-
 // SetResolution sets the "resolution" field.
 func (_u *VodUpdate) SetResolution(v string) *VodUpdate {
 	_u.mutation.SetResolution(v)
@@ -615,27 +594,6 @@ func (_u *VodUpdate) SetNillableLocked(v *bool) *VodUpdate {
 	if v != nil {
 		_u.SetLocked(*v)
 	}
-	return _u
-}
-
-// SetLocalViews sets the "local_views" field.
-func (_u *VodUpdate) SetLocalViews(v int) *VodUpdate {
-	_u.mutation.ResetLocalViews()
-	_u.mutation.SetLocalViews(v)
-	return _u
-}
-
-// SetNillableLocalViews sets the "local_views" field if the given value is not nil.
-func (_u *VodUpdate) SetNillableLocalViews(v *int) *VodUpdate {
-	if v != nil {
-		_u.SetLocalViews(*v)
-	}
-	return _u
-}
-
-// AddLocalViews adds value to the "local_views" field.
-func (_u *VodUpdate) AddLocalViews(v int) *VodUpdate {
-	_u.mutation.AddLocalViews(v)
 	return _u
 }
 
@@ -1143,12 +1101,6 @@ func (_u *VodUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.ClipVodOffsetCleared() {
 		_spec.ClearField(vod.FieldClipVodOffset, field.TypeInt)
 	}
-	if value, ok := _u.mutation.Views(); ok {
-		_spec.SetField(vod.FieldViews, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedViews(); ok {
-		_spec.AddField(vod.FieldViews, field.TypeInt, value)
-	}
 	if value, ok := _u.mutation.Resolution(); ok {
 		_spec.SetField(vod.FieldResolution, field.TypeString, value)
 	}
@@ -1268,12 +1220,6 @@ func (_u *VodUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Locked(); ok {
 		_spec.SetField(vod.FieldLocked, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.LocalViews(); ok {
-		_spec.SetField(vod.FieldLocalViews, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedLocalViews(); ok {
-		_spec.AddField(vod.FieldLocalViews, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SpriteThumbnailsEnabled(); ok {
 		_spec.SetField(vod.FieldSpriteThumbnailsEnabled, field.TypeBool, value)
@@ -1748,27 +1694,6 @@ func (_u *VodUpdateOne) ClearClipVodOffset() *VodUpdateOne {
 	return _u
 }
 
-// SetViews sets the "views" field.
-func (_u *VodUpdateOne) SetViews(v int) *VodUpdateOne {
-	_u.mutation.ResetViews()
-	_u.mutation.SetViews(v)
-	return _u
-}
-
-// SetNillableViews sets the "views" field if the given value is not nil.
-func (_u *VodUpdateOne) SetNillableViews(v *int) *VodUpdateOne {
-	if v != nil {
-		_u.SetViews(*v)
-	}
-	return _u
-}
-
-// AddViews adds value to the "views" field.
-func (_u *VodUpdateOne) AddViews(v int) *VodUpdateOne {
-	_u.mutation.AddViews(v)
-	return _u
-}
-
 // SetResolution sets the "resolution" field.
 func (_u *VodUpdateOne) SetResolution(v string) *VodUpdateOne {
 	_u.mutation.SetResolution(v)
@@ -2182,27 +2107,6 @@ func (_u *VodUpdateOne) SetNillableLocked(v *bool) *VodUpdateOne {
 	if v != nil {
 		_u.SetLocked(*v)
 	}
-	return _u
-}
-
-// SetLocalViews sets the "local_views" field.
-func (_u *VodUpdateOne) SetLocalViews(v int) *VodUpdateOne {
-	_u.mutation.ResetLocalViews()
-	_u.mutation.SetLocalViews(v)
-	return _u
-}
-
-// SetNillableLocalViews sets the "local_views" field if the given value is not nil.
-func (_u *VodUpdateOne) SetNillableLocalViews(v *int) *VodUpdateOne {
-	if v != nil {
-		_u.SetLocalViews(*v)
-	}
-	return _u
-}
-
-// AddLocalViews adds value to the "local_views" field.
-func (_u *VodUpdateOne) AddLocalViews(v int) *VodUpdateOne {
-	_u.mutation.AddLocalViews(v)
 	return _u
 }
 
@@ -2740,12 +2644,6 @@ func (_u *VodUpdateOne) sqlSave(ctx context.Context) (_node *Vod, err error) {
 	if _u.mutation.ClipVodOffsetCleared() {
 		_spec.ClearField(vod.FieldClipVodOffset, field.TypeInt)
 	}
-	if value, ok := _u.mutation.Views(); ok {
-		_spec.SetField(vod.FieldViews, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedViews(); ok {
-		_spec.AddField(vod.FieldViews, field.TypeInt, value)
-	}
 	if value, ok := _u.mutation.Resolution(); ok {
 		_spec.SetField(vod.FieldResolution, field.TypeString, value)
 	}
@@ -2865,12 +2763,6 @@ func (_u *VodUpdateOne) sqlSave(ctx context.Context) (_node *Vod, err error) {
 	}
 	if value, ok := _u.mutation.Locked(); ok {
 		_spec.SetField(vod.FieldLocked, field.TypeBool, value)
-	}
-	if value, ok := _u.mutation.LocalViews(); ok {
-		_spec.SetField(vod.FieldLocalViews, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedLocalViews(); ok {
-		_spec.AddField(vod.FieldLocalViews, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SpriteThumbnailsEnabled(); ok {
 		_spec.SetField(vod.FieldSpriteThumbnailsEnabled, field.TypeBool, value)

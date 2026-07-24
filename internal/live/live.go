@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,6 +37,11 @@ type Service struct {
 	QueueService        *queue.Service
 	NotificationService *notification.Service
 }
+
+// checkMu prevents two in-process callers from inspecting and starting the
+// same live archive at the same time. River uniqueness covers queued checks,
+// while this lock also protects direct service calls and tests.
+var checkMu sync.Mutex
 
 type Live struct {
 	ID                     uuid.UUID            `json:"id"`
@@ -264,6 +270,9 @@ func (s *Service) DeleteLiveWatchedChannel(c echo.Context, lID uuid.UUID) error 
 }
 
 func (s *Service) Check(ctx context.Context) error {
+	checkMu.Lock()
+	defer checkMu.Unlock()
+
 	log.Debug().Msg("checking live channels")
 	// get live watched channels from database
 	liveWatchedChannels, err := s.Store.Client.Live.Query().Where(live.WatchLive(true)).WithChannel().WithCategories().WithTitleRegex(func(ltrq *ent.LiveTitleRegexQuery) {
@@ -433,9 +442,15 @@ OUTER:
 
 				// check if stream is already being archived
 				if activeQueueItem != nil {
-					_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
-					if err != nil {
-						log.Error().Err(err).Msg("error updating live watched channel")
+					_, updateErr := s.Store.Client.Live.Update().
+						Where(
+							live.ID(lwc.ID),
+							live.IsLiveEQ(false),
+						).
+						SetIsLive(true).
+						Save(ctx)
+					if updateErr != nil {
+						log.Error().Err(updateErr).Msg("error updating live watched channel")
 					}
 					log.Debug().
 						Str("channel", lwc.Edges.Channel.Name).
@@ -480,45 +495,62 @@ OUTER:
 					continue
 				}
 				if !archiveResponse.Created {
-					_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
-					if err != nil {
-						log.Error().Err(err).Msg("error updating live watched channel")
+					_, updateErr := s.Store.Client.Live.Update().
+						Where(
+							live.ID(lwc.ID),
+							live.IsLiveEQ(false),
+						).
+						SetIsLive(true).
+						Save(ctx)
+					if updateErr != nil {
+						log.Error().Err(updateErr).Msg("error updating live watched channel")
 					}
 					log.Debug().
 						Str("channel", lwc.Edges.Channel.Name).
 						Str("stream_id", stream.ID).
 						Str("queue_id", archiveResponse.Queue.ID.String()).
 						Str("video_id", archiveResponse.Video.ID.String()).
-						Msg("livestream archive already active; skipping start notification and initial chapter")
+						Msg("livestream archive already active; skipping initial chapter")
 					continue OUTER
 				}
 
-				// Stream is online and archive started, update database
-				_, err = s.Store.Client.Live.UpdateOneID(lwc.ID).SetIsLive(true).Save(ctx)
-				if err != nil {
-					log.Error().Err(err).Msg("error updating live watched channel")
+				// Stream is online and archive started. Claim the false -> true
+				// transition atomically so concurrent checks can never send the
+				// same start notification twice.
+				becameLive := false
+				updated, updateErr := s.Store.Client.Live.Update().
+					Where(
+						live.ID(lwc.ID),
+						live.IsLiveEQ(false),
+					).
+					SetIsLive(true).
+					Save(ctx)
+				if updateErr != nil {
+					log.Error().Err(updateErr).Msg("error updating live watched channel")
+				} else {
+					becameLive = updated > 0
 				}
 
 				log.Info().Msgf("started live archive of %s", lwc.Edges.Channel.Name)
 
-				// Notification
-				// Fetch vod for notification and chapter creation
+				// Notify from the archive response before querying chapters. A
+				// temporary failure in the follow-up VOD query must not lose the
+				// live-start notification.
+				if becameLive && s.isFirstArchiveSegmentForStream(ctx, stream.ID, archiveResponse.Video.ID) {
+					s.sendLiveStartedNotification(
+						ctx,
+						lwc.Edges.Channel,
+						archiveResponse.Video,
+						archiveResponse.Queue,
+						stream.GameName,
+					)
+				}
+
+				// Fetch vod for chapter creation
 				vod, err := s.Store.Client.Vod.Query().Where(entVod.ExtStreamID(stream.ID)).WithChannel().WithQueue().Order(ent.Desc(entVod.FieldCreatedAt)).First(ctx)
 				if err != nil {
 					log.Error().Err(err).Msg("error getting vod")
 					continue
-				}
-				if s.NotificationService != nil && !wasAlreadyLive {
-					// Use a detached context so the notification is not cancelled when the parent context ends
-					notifCtx := context.WithoutCancel(ctx)
-					go func() {
-						defer func() {
-							if r := recover(); r != nil {
-								log.Error().Interface("panic", r).Msg("panic in SendLive notification")
-							}
-						}()
-						s.NotificationService.SendLive(notifCtx, lwc.Edges.Channel, vod, vod.Edges.Queue, stream.GameName)
-					}()
 				}
 
 				// Create initial chapter
@@ -586,6 +618,48 @@ OUTER:
 		}
 	}
 	return nil
+}
+
+// sendLiveStartedNotification dispatches the live-start event without tying
+// delivery to the lifetime of the live-check request. Callers invoke it only
+// after claiming the false -> true transition with an atomic database update.
+func (s *Service) sendLiveStartedNotification(
+	ctx context.Context,
+	channelItem *ent.Channel,
+	vodItem *ent.Vod,
+	queueItem *ent.Queue,
+	category string,
+) {
+	if s.NotificationService == nil {
+		return
+	}
+
+	notifCtx := context.WithoutCancel(ctx)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error().Interface("panic", r).Msg("panic in SendLive notification")
+			}
+		}()
+		s.NotificationService.SendLive(notifCtx, channelItem, vodItem, queueItem, category)
+	}()
+}
+
+// isFirstArchiveSegmentForStream keeps the live-start notification tied to the
+// Twitch stream rather than to each local recording segment. Crash recovery
+// can create another VOD with the same stream ID for the continuation.
+func (s *Service) isFirstArchiveSegmentForStream(ctx context.Context, streamID string, currentVideoID uuid.UUID) bool {
+	hasEarlierSegment, err := s.Store.Client.Vod.Query().
+		Where(
+			entVod.ExtStreamIDEQ(streamID),
+			entVod.IDNEQ(currentVideoID),
+		).
+		Exist(ctx)
+	if err != nil {
+		log.Error().Err(err).Str("stream_id", streamID).Msg("error checking previous live archive segments")
+		return true
+	}
+	return !hasEarlierSegment
 }
 
 // channelInLiveStreamInfo searches for a string in a slice of LiveStreamInfo and returns the first match.

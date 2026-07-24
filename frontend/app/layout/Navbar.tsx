@@ -45,6 +45,7 @@ export function Navbar() {
   const links: NavLink[] = [
     { link: '/', label: t('links.home') },
     { link: '/channels', label: t('links.channels') },
+    { link: '/live', label: t('links.live') },
     { link: '/videos', label: t('links.videos') },
     {
       link: '/archive',

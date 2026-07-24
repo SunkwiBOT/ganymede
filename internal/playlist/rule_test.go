@@ -43,7 +43,6 @@ func setupAppAndSeed(t *testing.T) (*server.Application, *ent.Playlist, *ent.Cha
 		Type:       utils.Archive,
 		Title:      "Test video - Playing Baldur's Gate 3",
 		Duration:   3600,
-		Views:      1000,
 		Resolution: string(utils.Best),
 	}, channel.ID)
 	assert.NoError(t, err, "Failed to create video")

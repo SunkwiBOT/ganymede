@@ -87,11 +87,6 @@ func ClipVodOffset(v int) predicate.Vod {
 	return predicate.Vod(sql.FieldEQ(FieldClipVodOffset, v))
 }
 
-// Views applies equality check predicate on the "views" field. It's identical to ViewsEQ.
-func Views(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldEQ(FieldViews, v))
-}
-
 // Resolution applies equality check predicate on the "resolution" field. It's identical to ResolutionEQ.
 func Resolution(v string) predicate.Vod {
 	return predicate.Vod(sql.FieldEQ(FieldResolution, v))
@@ -200,11 +195,6 @@ func TmpVideoHlsPath(v string) predicate.Vod {
 // Locked applies equality check predicate on the "locked" field. It's identical to LockedEQ.
 func Locked(v bool) predicate.Vod {
 	return predicate.Vod(sql.FieldEQ(FieldLocked, v))
-}
-
-// LocalViews applies equality check predicate on the "local_views" field. It's identical to LocalViewsEQ.
-func LocalViews(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldEQ(FieldLocalViews, v))
 }
 
 // SpriteThumbnailsEnabled applies equality check predicate on the "sprite_thumbnails_enabled" field. It's identical to SpriteThumbnailsEnabledEQ.
@@ -685,46 +675,6 @@ func ClipVodOffsetIsNil() predicate.Vod {
 // ClipVodOffsetNotNil applies the NotNil predicate on the "clip_vod_offset" field.
 func ClipVodOffsetNotNil() predicate.Vod {
 	return predicate.Vod(sql.FieldNotNull(FieldClipVodOffset))
-}
-
-// ViewsEQ applies the EQ predicate on the "views" field.
-func ViewsEQ(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldEQ(FieldViews, v))
-}
-
-// ViewsNEQ applies the NEQ predicate on the "views" field.
-func ViewsNEQ(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldNEQ(FieldViews, v))
-}
-
-// ViewsIn applies the In predicate on the "views" field.
-func ViewsIn(vs ...int) predicate.Vod {
-	return predicate.Vod(sql.FieldIn(FieldViews, vs...))
-}
-
-// ViewsNotIn applies the NotIn predicate on the "views" field.
-func ViewsNotIn(vs ...int) predicate.Vod {
-	return predicate.Vod(sql.FieldNotIn(FieldViews, vs...))
-}
-
-// ViewsGT applies the GT predicate on the "views" field.
-func ViewsGT(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldGT(FieldViews, v))
-}
-
-// ViewsGTE applies the GTE predicate on the "views" field.
-func ViewsGTE(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldGTE(FieldViews, v))
-}
-
-// ViewsLT applies the LT predicate on the "views" field.
-func ViewsLT(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldLT(FieldViews, v))
-}
-
-// ViewsLTE applies the LTE predicate on the "views" field.
-func ViewsLTE(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldLTE(FieldViews, v))
 }
 
 // ResolutionEQ applies the EQ predicate on the "resolution" field.
@@ -2225,46 +2175,6 @@ func LockedEQ(v bool) predicate.Vod {
 // LockedNEQ applies the NEQ predicate on the "locked" field.
 func LockedNEQ(v bool) predicate.Vod {
 	return predicate.Vod(sql.FieldNEQ(FieldLocked, v))
-}
-
-// LocalViewsEQ applies the EQ predicate on the "local_views" field.
-func LocalViewsEQ(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldEQ(FieldLocalViews, v))
-}
-
-// LocalViewsNEQ applies the NEQ predicate on the "local_views" field.
-func LocalViewsNEQ(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldNEQ(FieldLocalViews, v))
-}
-
-// LocalViewsIn applies the In predicate on the "local_views" field.
-func LocalViewsIn(vs ...int) predicate.Vod {
-	return predicate.Vod(sql.FieldIn(FieldLocalViews, vs...))
-}
-
-// LocalViewsNotIn applies the NotIn predicate on the "local_views" field.
-func LocalViewsNotIn(vs ...int) predicate.Vod {
-	return predicate.Vod(sql.FieldNotIn(FieldLocalViews, vs...))
-}
-
-// LocalViewsGT applies the GT predicate on the "local_views" field.
-func LocalViewsGT(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldGT(FieldLocalViews, v))
-}
-
-// LocalViewsGTE applies the GTE predicate on the "local_views" field.
-func LocalViewsGTE(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldGTE(FieldLocalViews, v))
-}
-
-// LocalViewsLT applies the LT predicate on the "local_views" field.
-func LocalViewsLT(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldLT(FieldLocalViews, v))
-}
-
-// LocalViewsLTE applies the LTE predicate on the "local_views" field.
-func LocalViewsLTE(v int) predicate.Vod {
-	return predicate.Vod(sql.FieldLTE(FieldLocalViews, v))
 }
 
 // SpriteThumbnailsEnabledEQ applies the EQ predicate on the "sprite_thumbnails_enabled" field.

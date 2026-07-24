@@ -8,7 +8,7 @@ import { RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { env } from 'next-runtime-env';
 import dayjs from 'dayjs';
 import { escapeURL } from '@/app/util/util';
-import { PlaybackStatus, useFetchPlaybackForVideo, useSetPlaybackProgressForVideo, useStartPlaybackForVideo, useUpdatePlaybackProgressForVideo } from '@/app/hooks/usePlayback';
+import { PlaybackStatus, useFetchPlaybackForVideo, useSetPlaybackProgressForVideo, useUpdatePlaybackProgressForVideo } from '@/app/hooks/usePlayback';
 import { useAxiosPrivate } from '@/app/hooks/useAxios';
 import useAuthStore from '@/app/store/useAuthStore';
 import { useSearchParams } from 'next/navigation';
@@ -24,10 +24,14 @@ interface Params {
 }
 
 const LIVE_EDGE_FALLBACK_DELAY_SECONDS = 2;
+// The temporary live playlist uses two-second HLS segments. Keep the DVR
+// control enabled as soon as at least one segment is available.
+const LIVE_DVR_MIN_WINDOW_SECONDS = 2;
 
 const seekToProcessingLiveEdge = (player: MediaPlayerInstance): boolean => {
   try {
     player.seekToLiveEdge();
+    return true;
   } catch {
     // The player can throw if the provider is not ready yet; fall back below.
   }
@@ -65,8 +69,8 @@ const VideoPlayer = ({ video, ref }: Params) => {
   const [videoSource, setVideoSource] = useState<MediaSrc>();
   const [videoPoster, setVideoPoster] = useState<string>("");
 
-  const hasStartedPlayback = useRef(false);
   const hasInitializedPlaybackTime = useRef(false);
+  const returnToLiveOnPlay = useRef(false);
 
   const [playerVolume, setPlayerVolume] = useState(1);
 
@@ -94,16 +98,6 @@ const VideoPlayer = ({ video, ref }: Params) => {
     retry: false,
     enabled: (isLoggedIn)
   })
-
-  // start playback
-  const startPlaybackMutation = useStartPlaybackForVideo(axiosPrivate, video.id)
-  useEffect(() => {
-    if (isLoggedIn && !hasStartedPlayback.current) {
-      startPlaybackMutation.mutate();
-      hasStartedPlayback.current = true;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   useEffect(() => {
     if (!player) return
@@ -267,6 +261,21 @@ const VideoPlayer = ({ video, ref }: Params) => {
       posterLoad="eager"
       volume={playerVolume}
       autoPlay={autoplayVideo}
+      onPause={() => {
+        if (isProcessingLive) {
+          returnToLiveOnPlay.current = true;
+        }
+      }}
+      onPlay={() => {
+        if (isProcessingLive && returnToLiveOnPlay.current && player.current) {
+          seekToProcessingLiveEdge(player.current);
+          returnToLiveOnPlay.current = false;
+        }
+      }}
+      // Vidstack otherwise infers a non-seekable live stream from the
+      // short-target-duration EVENT playlist used while archiving.
+      streamType={isProcessingLive ? "live:dvr" : "unknown"}
+      minLiveDVRWindow={LIVE_DVR_MIN_WINDOW_SECONDS}
     >
       {showAbsoluteTime && <AbsoluteTimeDisplay streamedAt={video.streamed_at} />}
       <MediaProvider>

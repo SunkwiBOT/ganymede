@@ -36,10 +36,14 @@ func (s *Service) StartTask(ctx context.Context, task string) error {
 
 	switch task {
 	case "check_live":
-		err := s.LiveService.Check(ctx)
+		// Route manual checks through River as well as periodic checks. This
+		// applies the job's uniqueness constraint, so an HTTP-triggered check
+		// cannot overlap the worker's scheduled check in another process.
+		job, err := s.RiverClient.Client.Insert(ctx, tasks_periodic.CheckChannelsForLivestreamsArgs{}, nil)
 		if err != nil {
-			return fmt.Errorf("error checking live: %v", err)
+			return fmt.Errorf("error inserting task: %v", err)
 		}
+		log.Info().Str("task_id", fmt.Sprintf("%d", job.Job.ID)).Msg("task created")
 
 	case "check_vod":
 		task, err := s.RiverClient.Client.Insert(ctx, tasks_periodic.CheckChannelsForNewVideosArgs{}, nil)

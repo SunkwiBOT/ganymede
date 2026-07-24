@@ -180,77 +180,99 @@ func checkIfTasksAreDone(ctx context.Context, entClient *ent.Client, input Archi
 		return err
 	}
 
+	tasksComplete := dbItems.Queue.TaskVideoDownload == utils.Success &&
+		dbItems.Queue.TaskVideoConvert == utils.Success &&
+		dbItems.Queue.TaskVideoMove == utils.Success &&
+		dbItems.Queue.TaskChatDownload == utils.Success &&
+		dbItems.Queue.TaskChatRender == utils.Success &&
+		dbItems.Queue.TaskChatMove == utils.Success
 	if dbItems.Queue.LiveArchive {
-		if dbItems.Queue.TaskVideoDownload == utils.Success && dbItems.Queue.TaskVideoConvert == utils.Success && dbItems.Queue.TaskVideoMove == utils.Success && dbItems.Queue.TaskChatDownload == utils.Success && dbItems.Queue.TaskChatConvert == utils.Success && dbItems.Queue.TaskChatRender == utils.Success && dbItems.Queue.TaskChatMove == utils.Success {
-			log.Debug().Msgf("all tasks for video %s are done", dbItems.Video.ID.String())
+		tasksComplete = tasksComplete &&
+			dbItems.Queue.TaskChatConvert == utils.Success
+	}
+	if !tasksComplete {
+		return nil
+	}
 
-			_, err := dbItems.Queue.Update().SetVideoProcessing(false).SetChatProcessing(false).SetProcessing(false).Save(context.Background())
-			if err != nil {
-				return err
-			}
+	log.Debug().Msgf("all tasks for video %s are done", dbItems.Video.ID.String())
 
-			_, err = entClient.Vod.UpdateOneID(dbItems.Video.ID).SetProcessing(false).Save(context.Background())
-			if err != nil {
-				return err
-			}
+	// Several independent video/chat workers call this function. Claim the
+	// completion transition atomically so only one caller can send the success
+	// notification and enqueue the storage task.
+	finalized, err := finalizeCompletedArchive(ctx, entClient, dbItems)
+	if err != nil {
+		return err
+	}
+	if !finalized {
+		return nil
+	}
 
-			if notifSvc, err := NotificationServiceFromContext(ctx); err == nil {
-				notifCtx := context.WithoutCancel(ctx)
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Error().Interface("panic", r).Msg("panic in notification")
-						}
-					}()
-					notifSvc.SendLiveArchiveSuccess(notifCtx, &dbItems.Channel, &dbItems.Video, &dbItems.Queue)
-				}()
+	if notifSvc, err := NotificationServiceFromContext(ctx); err == nil {
+		notifCtx := context.WithoutCancel(ctx)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error().Interface("panic", r).Msg("panic in notification")
+				}
+			}()
+			if dbItems.Queue.LiveArchive {
+				notifSvc.SendLiveArchiveSuccess(notifCtx, &dbItems.Channel, &dbItems.Video, &dbItems.Queue)
+			} else {
+				notifSvc.SendVideoArchiveSuccess(notifCtx, &dbItems.Channel, &dbItems.Video, &dbItems.Queue)
 			}
+		}()
+	}
 
-			// Queue task to calculate video storage usage
-			_, err = river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, &UpdateVideoStorageUsage{
-				VideoID: &dbItems.Video.ID,
-			}, nil)
-			if err != nil {
-				log.Error().Err(err).Msg("error queuing video storage usage update task")
-			}
-		}
-	} else {
-		if dbItems.Queue.TaskVideoDownload == utils.Success && dbItems.Queue.TaskVideoConvert == utils.Success && dbItems.Queue.TaskVideoMove == utils.Success && dbItems.Queue.TaskChatDownload == utils.Success && dbItems.Queue.TaskChatRender == utils.Success && dbItems.Queue.TaskChatMove == utils.Success {
-			log.Debug().Msgf("all tasks for video %s are done", dbItems.Video.ID.String())
-
-			_, err := dbItems.Queue.Update().SetVideoProcessing(false).SetChatProcessing(false).SetProcessing(false).Save(context.Background())
-			if err != nil {
-				return err
-			}
-
-			_, err = entClient.Vod.UpdateOneID(dbItems.Video.ID).SetProcessing(false).Save(context.Background())
-			if err != nil {
-				return err
-			}
-
-			if notifSvc, err := NotificationServiceFromContext(ctx); err == nil {
-				notifCtx := context.WithoutCancel(ctx)
-				go func() {
-					defer func() {
-						if r := recover(); r != nil {
-							log.Error().Interface("panic", r).Msg("panic in notification")
-						}
-					}()
-					notifSvc.SendVideoArchiveSuccess(notifCtx, &dbItems.Channel, &dbItems.Video, &dbItems.Queue)
-				}()
-			}
-
-			// Queue task to calculate video storage usage
-			_, err = river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, &UpdateVideoStorageUsage{
-				VideoID: &dbItems.Video.ID,
-			}, nil)
-			if err != nil {
-				log.Error().Err(err).Msg("error queuing video storage usage update task")
-			}
-		}
+	// Queue task to calculate video storage usage.
+	_, err = river.ClientFromContext[pgx.Tx](ctx).Insert(ctx, &UpdateVideoStorageUsage{
+		VideoID: &dbItems.Video.ID,
+	}, nil)
+	if err != nil {
+		log.Error().Err(err).Msg("error queuing video storage usage update task")
 	}
 
 	return nil
+}
+
+// finalizeCompletedArchive atomically claims an archive's completion state and
+// clears the processing flags. The boolean is false when another worker already
+// finalized the same queue item.
+func finalizeCompletedArchive(ctx context.Context, entClient *ent.Client, dbItems *GetDatabaseItemsResponse) (bool, error) {
+	completionCtx := context.WithoutCancel(ctx)
+	tx, err := entClient.Tx(completionCtx)
+	if err != nil {
+		return false, fmt.Errorf("error starting archive completion transaction: %w", err)
+	}
+
+	updated, err := tx.Queue.Update().
+		Where(
+			queue.ID(dbItems.Queue.ID),
+			queue.ProcessingEQ(true),
+		).
+		SetVideoProcessing(false).
+		SetChatProcessing(false).
+		SetProcessing(false).
+		Save(completionCtx)
+	if err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("error claiming archive completion: %w", err)
+	}
+	if updated == 0 {
+		_ = tx.Rollback()
+		return false, nil
+	}
+
+	if _, err := tx.Vod.UpdateOneID(dbItems.Video.ID).SetProcessing(false).Save(completionCtx); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("error finalizing archived video: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = tx.Rollback()
+		return false, fmt.Errorf("error committing archive completion: %w", err)
+	}
+
+	return true, nil
 }
 
 func cleanupEmptyLiveArchive(ctx context.Context, store *database.Database, riverClient *river.Client[pgx.Tx], dbItems *GetDatabaseItemsResponse, excludeJobIDs ...int64) error {
@@ -424,8 +446,19 @@ func containsAllTags(jobTags, filterTags []string) bool {
 // CustomErrorHandler implements river.ErrorHandler to handle errors and panics in jobs.
 type CustomErrorHandler struct{}
 
+func isFinalJobAttempt(job *rivertype.JobRow) bool {
+	if job == nil || job.MaxAttempts <= 0 {
+		return true
+	}
+	return job.Attempt >= job.MaxAttempts
+}
+
 func (*CustomErrorHandler) HandleError(ctx context.Context, job *rivertype.JobRow, err error) *river.ErrorHandlerResult {
-	log.Error().Str("job_id", fmt.Sprintf("%d", job.ID)).Str("attempt", fmt.Sprintf("%d", job.Attempt)).Str("attempted_by", job.AttemptedBy[job.Attempt-1]).Str("args", string(job.EncodedArgs)).Err(err).Msg("task error")
+	attemptedBy := ""
+	if job != nil && job.Attempt > 0 && job.Attempt-1 < len(job.AttemptedBy) {
+		attemptedBy = job.AttemptedBy[job.Attempt-1]
+	}
+	log.Error().Str("job_id", fmt.Sprintf("%d", job.ID)).Str("attempt", fmt.Sprintf("%d", job.Attempt)).Str("attempted_by", attemptedBy).Str("args", string(job.EncodedArgs)).Err(err).Msg("task error")
 
 	// Check if this is a phantom live stream and cleanup (GH#760)
 	// This is behind an experimental flag
@@ -483,6 +516,14 @@ func (*CustomErrorHandler) HandleError(ctx context.Context, job *rivertype.JobRo
 
 	// if the job is an archive job, mark it as failed in the queue and send an error notification
 	if utils.Contains(job.Tags, archive_tag) && !utils.Contains(job.Tags, allow_fail_tag) {
+		if !isFinalJobAttempt(job) {
+			log.Warn().
+				Int("attempt", job.Attempt).
+				Int("max_attempts", job.MaxAttempts).
+				Msg("archive task failed; deferring error notification until the final attempt")
+			return nil
+		}
+
 		// unmarshal custom arguments
 		var args RiverJobArgs
 		if err := json.Unmarshal(job.EncodedArgs, &args); err != nil {
@@ -523,10 +564,22 @@ func (*CustomErrorHandler) HandleError(ctx context.Context, job *rivertype.JobRo
 }
 
 func (*CustomErrorHandler) HandlePanic(ctx context.Context, job *rivertype.JobRow, panicVal any, trace string) *river.ErrorHandlerResult {
-	log.Error().Str("job_id", fmt.Sprintf("%d", job.ID)).Str("attempt", fmt.Sprintf("%d", job.Attempt)).Str("attempted_by", job.AttemptedBy[job.Attempt-1]).Str("args", string(job.EncodedArgs)).Str("panic_val", fmt.Sprintf("%v", panicVal)).Str("trace", trace).Msg("task error")
+	attemptedBy := ""
+	if job != nil && job.Attempt > 0 && job.Attempt-1 < len(job.AttemptedBy) {
+		attemptedBy = job.AttemptedBy[job.Attempt-1]
+	}
+	log.Error().Str("job_id", fmt.Sprintf("%d", job.ID)).Str("attempt", fmt.Sprintf("%d", job.Attempt)).Str("attempted_by", attemptedBy).Str("args", string(job.EncodedArgs)).Str("panic_val", fmt.Sprintf("%v", panicVal)).Str("trace", trace).Msg("task error")
 
 	// if the job is an archive job, mark it as failed in the queue and send an error notification
 	if utils.Contains(job.Tags, archive_tag) && !utils.Contains(job.Tags, allow_fail_tag) {
+		if !isFinalJobAttempt(job) {
+			log.Warn().
+				Int("attempt", job.Attempt).
+				Int("max_attempts", job.MaxAttempts).
+				Msg("archive task panicked; deferring error notification until the final attempt")
+			return nil
+		}
+
 		// unmarshal custom arguments
 		var args RiverJobArgs
 		if err := json.Unmarshal(job.EncodedArgs, &args); err != nil {

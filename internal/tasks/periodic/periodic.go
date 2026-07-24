@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/rs/zerolog/log"
 	entPlaylist "github.com/zibbp/ganymede/ent/playlist"
 	entPlaylistGroup "github.com/zibbp/ganymede/ent/playlistrulegroup"
@@ -42,6 +43,18 @@ func (CheckChannelsForLivestreamsArgs) Kind() string { return tasks.TaskCheckCha
 func (w CheckChannelsForLivestreamsArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
 		MaxAttempts: 5,
+		// A live check must not overlap another live check. Without this,
+		// two checks can both observe an absent archive and start it twice.
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStateAvailable,
+				rivertype.JobStatePending,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+			},
+		},
 	}
 }
 

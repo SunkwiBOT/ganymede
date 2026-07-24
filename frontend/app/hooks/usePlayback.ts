@@ -67,40 +67,6 @@ const useFetchPlaybackForVideo = (
   });
 };
 
-const startPlaybackForVideo = async (
-  axiosPrivate: AxiosInstance,
-  videoId: string
-): Promise<ApiResponse<NullResponse>> => {
-  const response = await axiosPrivate.post(
-    `/api/v1/playback/start?video_id=${videoId}`
-  );
-  return response.data.data;
-};
-
-const useStartPlaybackForVideo = (
-  axiosPrivate: AxiosInstance,
-  videoId: string,
-  options?: Omit<
-    UseMutationOptions<
-      ApiResponse<NullResponse>,
-      Error,
-      void,
-      [string, string]
-    >,
-    "queryKey" | "queryFn"
-  >
-) => {
-  const queryClient = useQueryClient();
-  return useMutation<ApiResponse<NullResponse>, Error, void, [string, string]>({
-    mutationFn: () => startPlaybackForVideo(axiosPrivate, videoId),
-    ...options,
-    onSuccess: (data, variables, onMutateResult, context) => {
-      queryClient.invalidateQueries({ queryKey: ["playback-videos"] });
-      options?.onSuccess?.(data, variables, onMutateResult, context);
-    },
-  });
-};
-
 type UpdatePlaybackProgressVariables = {
   axiosPrivate: AxiosInstance;
   videoId: string;
@@ -259,7 +225,6 @@ const useDeletePlayback = () => {
 export {
   useFetchPlaybackForVideo,
   fetchPlaybackForVideo,
-  useStartPlaybackForVideo,
   useUpdatePlaybackProgressForVideo,
   useSetPlaybackProgressForVideo,
   useGetLastPlaybackVideos,

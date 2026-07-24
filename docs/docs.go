@@ -1248,6 +1248,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/live/playback/{login}": {
+            "get": {
+                "description": "Resolve a Twitch live stream using Ganymede's configured OAuth token and livestream proxies. No VOD or queue item is created.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Live"
+                ],
+                "summary": "Start temporary live playback",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Twitch channel login",
+                        "name": "login",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http.LivePlaybackResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/live/{id}": {
             "put": {
                 "security": [
@@ -1811,50 +1852,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/ent.Playback"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/playback/start": {
-            "post": {
-                "description": "Adds a view to the video local view count",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Playback"
-                ],
-                "summary": "Start playback",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "vod id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "string"
                         }
                     },
                     "400": {
@@ -4437,6 +4434,12 @@ const docTemplate = `{
                 "is_action": {
                     "type": "boolean"
                 },
+                "is_first_message": {
+                    "type": "boolean"
+                },
+                "reply": {
+                    "$ref": "#/definitions/chat.Reply"
+                },
                 "user_badges": {
                     "type": "array",
                     "items": {
@@ -4448,6 +4451,26 @@ const docTemplate = `{
                 },
                 "user_notice_params": {
                     "$ref": "#/definitions/chat.UserNoticeParams"
+                }
+            }
+        },
+        "chat.Reply": {
+            "type": "object",
+            "properties": {
+                "parent_display_name": {
+                    "type": "string"
+                },
+                "parent_msg_body": {
+                    "type": "string"
+                },
+                "parent_msg_id": {
+                    "type": "string"
+                },
+                "parent_user_id": {
+                    "type": "string"
+                },
+                "parent_user_login": {
+                    "type": "string"
                 }
             }
         },
@@ -4463,7 +4486,16 @@ const docTemplate = `{
         "chat.UserNoticeParams": {
             "type": "object",
             "properties": {
-                "msg_id": {}
+                "msg_id": {},
+                "params": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "system_msg": {
+                    "type": "string"
+                }
             }
         },
         "config.Config": {
@@ -5555,10 +5587,6 @@ const docTemplate = `{
                     "description": "Path to the raw live chat file",
                     "type": "string"
                 },
-                "local_views": {
-                    "description": "LocalViews holds the value of the \"local_views\" field.",
-                    "type": "integer"
-                },
                 "locked": {
                     "description": "Locked holds the value of the \"locked\" field.",
                     "type": "boolean"
@@ -5673,10 +5701,6 @@ const docTemplate = `{
                 "video_path": {
                     "description": "VideoPath holds the value of the \"video_path\" field.",
                     "type": "string"
-                },
-                "views": {
-                    "description": "Views holds the value of the \"views\" field.",
-                    "type": "integer"
                 },
                 "web_thumbnail_path": {
                     "description": "WebThumbnailPath holds the value of the \"web_thumbnail_path\" field.",
@@ -5847,13 +5871,12 @@ const docTemplate = `{
                     "type": "string",
                     "enum": [
                         "best",
-                        "source",
-                        "1440",
-                        "1080",
-                        "720",
-                        "480",
-                        "360",
-                        "160",
+                        "1440p",
+                        "1080p",
+                        "720p",
+                        "480p",
+                        "360p",
+                        "160p",
                         "audio"
                     ]
                 },
@@ -6029,7 +6052,6 @@ const docTemplate = `{
                 "title",
                 "type",
                 "video_path",
-                "views",
                 "web_thumbnail_path"
             ],
             "properties": {
@@ -6106,12 +6128,32 @@ const docTemplate = `{
                     "type": "string",
                     "minLength": 1
                 },
-                "views": {
-                    "type": "integer"
-                },
                 "web_thumbnail_path": {
                     "type": "string",
                     "minLength": 1
+                }
+            }
+        },
+        "http.LivePlaybackResponse": {
+            "type": "object",
+            "properties": {
+                "display_name": {
+                    "type": "string"
+                },
+                "login": {
+                    "type": "string"
+                },
+                "playback_url": {
+                    "type": "string"
+                },
+                "profile_image_url": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -6768,13 +6810,12 @@ const docTemplate = `{
                     "type": "string",
                     "enum": [
                         "best",
-                        "source",
-                        "1440",
-                        "1080",
-                        "720",
-                        "480",
-                        "360",
-                        "160",
+                        "1440p",
+                        "1080p",
+                        "720p",
+                        "480p",
+                        "360p",
+                        "160p",
                         "audio"
                     ]
                 },

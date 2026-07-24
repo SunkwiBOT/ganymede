@@ -38,8 +38,6 @@ type Vod struct {
 	Duration int `json:"duration,omitempty"`
 	// The offset in seconds to where the clip starts in the VOD. This is only populdated if the video is a clip.
 	ClipVodOffset int `json:"clip_vod_offset,omitempty"`
-	// Views holds the value of the "views" field.
-	Views int `json:"views,omitempty"`
 	// Resolution holds the value of the "resolution" field.
 	Resolution string `json:"resolution,omitempty"`
 	// Whether the VOD is currently processing.
@@ -84,8 +82,6 @@ type Vod struct {
 	TmpVideoHlsPath string `json:"tmp_video_hls_path,omitempty"`
 	// Locked holds the value of the "locked" field.
 	Locked bool `json:"locked,omitempty"`
-	// LocalViews holds the value of the "local_views" field.
-	LocalViews int `json:"local_views,omitempty"`
 	// SpriteThumbnailsEnabled holds the value of the "sprite_thumbnails_enabled" field.
 	SpriteThumbnailsEnabled bool `json:"sprite_thumbnails_enabled,omitempty"`
 	// SpriteThumbnailsImages holds the value of the "sprite_thumbnails_images" field.
@@ -201,7 +197,7 @@ func (*Vod) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case vod.FieldProcessing, vod.FieldLocked, vod.FieldSpriteThumbnailsEnabled:
 			values[i] = new(sql.NullBool)
-		case vod.FieldDuration, vod.FieldClipVodOffset, vod.FieldViews, vod.FieldLocalViews, vod.FieldSpriteThumbnailsInterval, vod.FieldSpriteThumbnailsWidth, vod.FieldSpriteThumbnailsHeight, vod.FieldSpriteThumbnailsRows, vod.FieldSpriteThumbnailsColumns, vod.FieldStorageSizeBytes:
+		case vod.FieldDuration, vod.FieldClipVodOffset, vod.FieldSpriteThumbnailsInterval, vod.FieldSpriteThumbnailsWidth, vod.FieldSpriteThumbnailsHeight, vod.FieldSpriteThumbnailsRows, vod.FieldSpriteThumbnailsColumns, vod.FieldStorageSizeBytes:
 			values[i] = new(sql.NullInt64)
 		case vod.FieldExtID, vod.FieldClipExtVodID, vod.FieldExtStreamID, vod.FieldPlatform, vod.FieldType, vod.FieldTitle, vod.FieldResolution, vod.FieldThumbnailPath, vod.FieldWebThumbnailPath, vod.FieldVideoPath, vod.FieldVideoHlsPath, vod.FieldChatPath, vod.FieldLiveChatPath, vod.FieldLiveChatConvertPath, vod.FieldChatVideoPath, vod.FieldInfoPath, vod.FieldCaptionPath, vod.FieldFolderName, vod.FieldFileName, vod.FieldTmpVideoDownloadPath, vod.FieldTmpVideoConvertPath, vod.FieldTmpChatDownloadPath, vod.FieldTmpLiveChatDownloadPath, vod.FieldTmpLiveChatConvertPath, vod.FieldTmpChatRenderPath, vod.FieldTmpVideoHlsPath:
 			values[i] = new(sql.NullString)
@@ -279,12 +275,6 @@ func (_m *Vod) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field clip_vod_offset", values[i])
 			} else if value.Valid {
 				_m.ClipVodOffset = int(value.Int64)
-			}
-		case vod.FieldViews:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field views", values[i])
-			} else if value.Valid {
-				_m.Views = int(value.Int64)
 			}
 		case vod.FieldResolution:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -417,12 +407,6 @@ func (_m *Vod) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field locked", values[i])
 			} else if value.Valid {
 				_m.Locked = value.Bool
-			}
-		case vod.FieldLocalViews:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field local_views", values[i])
-			} else if value.Valid {
-				_m.LocalViews = int(value.Int64)
 			}
 		case vod.FieldSpriteThumbnailsEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -589,9 +573,6 @@ func (_m *Vod) String() string {
 	builder.WriteString("clip_vod_offset=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ClipVodOffset))
 	builder.WriteString(", ")
-	builder.WriteString("views=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Views))
-	builder.WriteString(", ")
 	builder.WriteString("resolution=")
 	builder.WriteString(_m.Resolution)
 	builder.WriteString(", ")
@@ -657,9 +638,6 @@ func (_m *Vod) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("locked=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Locked))
-	builder.WriteString(", ")
-	builder.WriteString("local_views=")
-	builder.WriteString(fmt.Sprintf("%v", _m.LocalViews))
 	builder.WriteString(", ")
 	builder.WriteString("sprite_thumbnails_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.SpriteThumbnailsEnabled))

@@ -55,7 +55,7 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 
 // Template variable definitions grouped by category
 const CHANNEL_VARS = ["channel_id", "channel_ext_id", "channel_display_name"];
-const VIDEO_VARS = ["vod_id", "vod_ext_id", "vod_platform", "vod_type", "vod_title", "vod_duration", "vod_views", "vod_resolution", "vod_streamed_at", "vod_created_at"];
+const VIDEO_VARS = ["vod_id", "vod_ext_id", "vod_platform", "vod_type", "vod_title", "vod_duration", "vod_resolution", "vod_streamed_at", "vod_created_at"];
 const QUEUE_VARS = ["queue_id", "queue_created_at"];
 
 // Which variables are available for each trigger type

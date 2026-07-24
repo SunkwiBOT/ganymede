@@ -37,7 +37,6 @@ const AdminVideoDrawerContent = ({ video, mode, handleClose }: Props) => {
     type: z.nativeEnum(VideoType, { message: t('validation.type') }),
     platform: z.nativeEnum(Platform, { message: t('validation.platform') }),
     duration: z.number().min(1, { message: t('validation.duration') }),
-    views: z.number().min(1),
     resolution: z.string().min(1),
     streamed_at: z.string().datetime({ offset: true }),
     web_thumbnail_path: z.string().min(1),
@@ -53,7 +52,6 @@ const AdminVideoDrawerContent = ({ video, mode, handleClose }: Props) => {
       type: video?.type || "",
       title: video?.title || "",
       duration: video?.duration || 0,
-      views: video?.views || 0,
       resolution: video?.resolution || "",
       thumbnail_path: video?.thumbnail_path || "",
       web_thumbnail_path: video?.web_thumbnail_path || "",
@@ -217,29 +215,14 @@ const AdminVideoDrawerContent = ({ video, mode, handleClose }: Props) => {
           withAsterisk
         />
 
-        <Flex
-          gap="md"
-          justify="flex-start"
-          align="center"
-          direction="row"
-        >
-          <NumberInput
-            label={t('durationLabel')}
-            placeholder="0"
-            key={form.key('duration')}
-            {...form.getInputProps('duration')}
-            min={0}
-            withAsterisk
-          />
-          <NumberInput
-            label={t('viewCountLabel')}
-            placeholder="0"
-            key={form.key('views')}
-            {...form.getInputProps('views')}
-            min={0}
-            withAsterisk
-          />
-        </Flex>
+        <NumberInput
+          label={t('durationLabel')}
+          placeholder="0"
+          key={form.key('duration')}
+          {...form.getInputProps('duration')}
+          min={0}
+          withAsterisk
+        />
 
         <TextInput
           withAsterisk

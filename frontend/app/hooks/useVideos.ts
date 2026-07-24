@@ -27,7 +27,6 @@ export interface Video {
   title: string;
   duration: number;
   clip_vod_offset?: number;
-  views: number;
   resolution: string;
   sprite_thumbnails_columns: number;
   sprite_thumbnails_enabled: boolean;
@@ -58,7 +57,6 @@ export interface Video {
   updated_at: Date;
   created_at: Date;
   edges: VideoEdges;
-  local_views?: number;
   locked: boolean;
   caption_path: string;
   storage_size_bytes?: number;
@@ -85,8 +83,6 @@ export enum VideoType {
 
 export enum VideoSortBy {
   Date = "date", // streamed at / published at / uploaded at
-  Views = "views", // source views
-  LocalViews = "local_views", // local views
   Created = "created", // when added to Ganymede
 }
 
@@ -127,7 +123,6 @@ export interface CreateVodRequest {
   type: VideoType;
   title: string;
   duration: number;
-  views: number;
   resolution?: string;
   processing: boolean;
   thumbnail_path?: string;

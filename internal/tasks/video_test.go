@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/riverqueue/river/rivertype"
 	"github.com/zibbp/ganymede/ent"
 )
 
@@ -41,6 +43,107 @@ func TestValidateNonEmptyFile(t *testing.T) {
 			t.Fatalf("expected nil error for non-empty file, got: %v", err)
 		}
 	})
+}
+
+func TestIsFinalJobAttempt(t *testing.T) {
+	tests := []struct {
+		name string
+		job  *rivertype.JobRow
+		want bool
+	}{
+		{
+			name: "intermediate attempt",
+			job:  &rivertype.JobRow{Attempt: 1, MaxAttempts: 3},
+			want: false,
+		},
+		{
+			name: "last attempt",
+			job:  &rivertype.JobRow{Attempt: 3, MaxAttempts: 3},
+			want: true,
+		},
+		{
+			name: "attempt beyond limit",
+			job:  &rivertype.JobRow{Attempt: 4, MaxAttempts: 3},
+			want: true,
+		},
+		{
+			name: "missing attempt limit is treated as final",
+			job:  &rivertype.JobRow{Attempt: 1},
+			want: true,
+		},
+		{
+			name: "nil job is treated as final",
+			job:  nil,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isFinalJobAttempt(tt.job); got != tt.want {
+				t.Fatalf("isFinalJobAttempt() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsLiveArchiveJobStale(t *testing.T) {
+	now := time.Date(2026, time.July, 24, 12, 0, 0, 0, time.UTC)
+	recent := now.Add(-30 * time.Second)
+	old := now.Add(-2 * time.Minute)
+
+	tests := []struct {
+		name string
+		job  *rivertype.JobRow
+		args RiverJobArgs
+		want bool
+	}{
+		{
+			name: "fresh custom heartbeat",
+			job:  &rivertype.JobRow{CreatedAt: old},
+			args: RiverJobArgs{Input: ArchiveVideoInput{HeartBeatTime: recent}},
+			want: false,
+		},
+		{
+			name: "expired custom heartbeat",
+			job:  &rivertype.JobRow{CreatedAt: recent},
+			args: RiverJobArgs{Input: ArchiveVideoInput{HeartBeatTime: old}},
+			want: true,
+		},
+		{
+			name: "missing heartbeat falls back to recent attempt",
+			job:  &rivertype.JobRow{AttemptedAt: &recent, CreatedAt: old},
+			want: false,
+		},
+		{
+			name: "missing heartbeat falls back to old attempt",
+			job:  &rivertype.JobRow{AttemptedAt: &old, CreatedAt: recent},
+			want: true,
+		},
+		{
+			name: "missing heartbeat and attempt falls back to creation",
+			job:  &rivertype.JobRow{CreatedAt: old},
+			want: true,
+		},
+		{
+			name: "missing timestamps stays active conservatively",
+			job:  &rivertype.JobRow{},
+			want: false,
+		},
+		{
+			name: "nil job is stale",
+			job:  nil,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isLiveArchiveJobStale(tt.job, tt.args, now); got != tt.want {
+				t.Fatalf("isLiveArchiveJobStale() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestValidateRecoverableLiveVideoInput(t *testing.T) {

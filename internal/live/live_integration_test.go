@@ -194,7 +194,6 @@ func TestCheckReusesActiveLiveArchiveWithoutDuplicateStart(t *testing.T) {
 		SetType(utils.Live).
 		SetTitle(stream.Title).
 		SetDuration(1).
-		SetViews(1).
 		SetResolution("best").
 		SetProcessing(true).
 		SetWebThumbnailPath("/tmp/existingchannel-web-thumbnail.jpg").

@@ -217,10 +217,11 @@ func (rc *RiverWorkerClient) GetPeriodicTasks(liveService *live.Service) ([]*riv
 	}
 
 	periodicJobs := []*river.PeriodicJob{
-		// archive watchdog
-		// runs every 5 minutes
+		// Archive watchdog. Keep this below the live-job heartbeat timeout so a
+		// crash-left recording is finalized promptly and a continuation capture
+		// can begin while the streamer is still live.
 		river.NewPeriodicJob(
-			river.PeriodicInterval(5*time.Minute),
+			river.PeriodicInterval(1*time.Minute),
 			func() (river.JobArgs, *river.InsertOpts) {
 				return tasks.WatchdogArgs{}, nil
 			},

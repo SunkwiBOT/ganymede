@@ -21,6 +21,7 @@ import (
 	"github.com/zibbp/ganymede/internal/config"
 	"github.com/zibbp/ganymede/internal/errors"
 	"github.com/zibbp/ganymede/internal/hls"
+	"github.com/zibbp/ganymede/internal/livestream"
 	"github.com/zibbp/ganymede/internal/platform"
 	"github.com/zibbp/ganymede/internal/utils"
 )
@@ -318,50 +319,11 @@ func DownloadTwitchLiveVideo(ctx context.Context, video ent.Vod, channel ent.Cha
 
 	log.Debug().Str("video_id", video.ID.String()).Msgf("logging ffmpeg output to %s", logFilePath)
 
-	proxyFound := false // Whether a proxy was found
-	var masterPlaylist *hls.Multivariant
-
-	twitchURL := utils.CreateTwitchURL(video.ExtID, video.Type, channel.Name)
-
-	// Handle proxy setting
-	proxyEnabled := config.Get().Livestream.ProxyEnabled
-	whitelistedChannels := config.Get().Livestream.ProxyWhitelist // list of channels that are whitelisted from using proxy
-	if proxyEnabled {
-		if utils.Contains(whitelistedChannels, channel.Name) {
-			log.Debug().Str("channel_name", channel.Name).Msg("channel is whitelisted, not using proxy")
-		} else {
-			proxyParams := config.Get().Livestream.ProxyParameters
-			proxyList := config.Get().Livestream.Proxies
-
-			log.Debug().Str("proxy_list", fmt.Sprintf("%v", proxyList)).Msg("proxy list")
-
-			// Try proxies - the first one that works will be used
-			for _, proxy := range proxyList {
-				// proxyUrl is url that will be sent to ffmpeg for download
-				// this can be a direct URL or a proxy URL
-				proxyUrl := twitchURL
-				if proxy.ProxyType == utils.ProxyTypeTwitchHLS {
-					proxyUrl = fmt.Sprintf("%s/playlist/%s.m3u8%s", proxy.URL, channel.Name, proxyParams)
-				}
-				// Try the proxy server
-				var ok bool
-				masterPlaylist, ok = tryProxyServer(proxy.URL, proxyUrl, proxy.Header, proxy.ProxyType)
-				if ok {
-					log.Debug().Str("channel_name", channel.Name).Str("proxy_url", proxy.URL).Msg("proxy found")
-					proxyFound = true
-					break
-				}
-			}
-		}
+	streamSource, err := livestream.Resolve(ctx, channel.Name)
+	if err != nil {
+		return fmt.Errorf("failed to get stream: %w", err)
 	}
-
-	if !proxyFound {
-		tc := &platform.TwitchConnection{}
-		masterPlaylist, err = tc.GetStream(ctx, channel.Name)
-		if err != nil {
-			return fmt.Errorf("failed to get stream: %v", err)
-		}
-	}
+	masterPlaylist := streamSource.Playlist
 
 	qualities := make([]string, 0, len(masterPlaylist.Variants))
 	qualitiesURI := make(map[string]string, len(masterPlaylist.Variants))

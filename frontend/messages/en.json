@@ -13,6 +13,19 @@
     "loading": "Loading video",
     "error": "Error loading video"
   },
+  "LivePage": {
+    "pageTitle": "Watch a Live Stream",
+    "formMessage": "Enter a Twitch channel login or URL. The stream is relayed temporarily through Ganymede without creating a recording.",
+    "channelPlaceholder": "Twitch channel login or URL",
+    "watchButton": "Watch Live",
+    "invalidChannel": "Enter a valid Twitch channel login.",
+    "loadingPlayer": "Loading Twitch player",
+    "unavailableTitle": "Stream unavailable",
+    "unavailableMessage": "The channel is offline, does not exist, or its stream cannot be reached with the current token and proxy settings.",
+    "retry": "Try again",
+    "temporaryBadge": "Temporary",
+    "temporaryTooltip": "Relayed live playback; nothing is saved to the temporary or video folders"
+  },
   "SearchPage": {
     "title": "Search",
     "error": "Error loading search results",
@@ -125,6 +138,7 @@
     "links": {
       "home": "Home",
       "channels": "Channels",
+      "live": "Live",
       "videos": "Videos",
       "archive": "Archive",
       "playlists": "Playlists",
@@ -618,7 +632,6 @@
     "typeLabel": "Type",
     "platformLabel": "Platform",
     "durationLabel": "Duration (seconds)",
-    "viewCountLabel": "View Count",
     "resolutionLabel": "Resolution",
     "streamedAtLabel": "Streamed At",
     "thumbnailPathLabel": "Thumbnail Path",
@@ -813,9 +826,7 @@
     "watchedVideoText": "You have already watched this video",
     "lockedText": "Video is locked",
     "streamedOnText": "Streamed on",
-    "sourceViewsText": "source views",
-    "localViewsText": "local views",
-    "viewsText": "views",
+    "liveElapsedTooltip": "Time elapsed since the live stream started",
     "loadingVideos": "Loading videos",
     "errorLoadingVideos": "Error loading videos",
     "loadingChatHistogram": "Loading chat histogram",
@@ -902,8 +913,6 @@
     "hideChatIconTooltip": "Hide Chat",
     "showChatIconTooltip": "Show Chat",
     "absoluteTimeIconTooltip": "Toggle Absolute Time",
-    "sourceViewsTooltip": "source views",
-    "localViewsTooltip": "local views",
     "streamedOnTooltip": "Streamed on",
     "videoTypeTooltip": "Video type",
     "videoClipsTitle": "Video Clips",
@@ -911,8 +920,6 @@
     "enums": {
       "VideoSortBy": {
         "date": "Date",
-        "views": "Views",
-        "local_views": "Local Views",
         "created": "Created"
       },
       "VideoOrder": {

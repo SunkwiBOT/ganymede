@@ -13,6 +13,19 @@
     "loading": "Video laden",
     "error": "Error loading video"
   },
+  "LivePage": {
+    "pageTitle": "Livestream ansehen",
+    "formMessage": "Gib einen Twitch-Kanalnamen oder eine URL ein. Der Stream wird vorübergehend über Ganymede weitergeleitet, ohne eine Aufnahme zu erstellen.",
+    "channelPlaceholder": "Twitch-Kanalname oder URL",
+    "watchButton": "Live ansehen",
+    "invalidChannel": "Gib einen gültigen Twitch-Kanalnamen ein.",
+    "loadingPlayer": "Twitch-Player wird geladen",
+    "unavailableTitle": "Stream nicht verfügbar",
+    "unavailableMessage": "Der Kanal ist offline, existiert nicht oder der Stream ist mit den aktuellen Token- und Proxy-Einstellungen nicht erreichbar.",
+    "retry": "Erneut versuchen",
+    "temporaryBadge": "Temporär",
+    "temporaryTooltip": "Weitergeleitete Live-Wiedergabe; im temporären Ordner oder Videoordner wird nichts gespeichert"
+  },
   "SearchPage": {
     "title": "Suche",
     "error": "Fehler beim Laden der Suchergebnisse",
@@ -125,6 +138,7 @@
     "links": {
       "home": "Startseite",
       "channels": "Kanäle",
+      "live": "Live",
       "videos": "Videos",
       "archive": "Archivieren",
       "playlists": "Wiedergabelisten",
@@ -618,7 +632,6 @@
     "typeLabel": "Typ",
     "platformLabel": "Plattform",
     "durationLabel": "Dauer (Sekunden)",
-    "viewCountLabel": "Anzahl der Aufrufe",
     "resolutionLabel": "Auflösung",
     "streamedAtLabel": "Gestreamt am",
     "thumbnailPathLabel": "Thumbnail-Pfad",
@@ -813,9 +826,7 @@
     "watchedVideoText": "Dieses Video hast du bereits angesehen",
     "lockedText": "Video ist gesperrt",
     "streamedOnText": "Gestreamt am",
-    "sourceViewsText": "Aufrufe der Quelle",
-    "localViewsText": "Lokale Aufrufe",
-    "viewsText": "Aufrufe",
+    "liveElapsedTooltip": "Zeit seit Beginn des Livestreams",
     "loadingVideos": "Videos werden geladen",
     "errorLoadingVideos": "Fehler beim Laden der Videos",
     "loadingChatHistogram": "Lade Chat-Histogramm",
@@ -902,8 +913,6 @@
     "hideChatIconTooltip": "Chat verbergen",
     "showChatIconTooltip": "Chat anzeigen",
     "absoluteTimeIconTooltip": "Absolute Zeit umschalten",
-    "sourceViewsTooltip": "Quell-views",
-    "localViewsTooltip": "Lokale views",
     "streamedOnTooltip": "Gestreamt am",
     "videoTypeTooltip": "Videotyp",
     "videoClipsTitle": "Video-Clips",
@@ -911,8 +920,6 @@
     "enums": {
       "VideoSortBy": {
         "date": "Datum",
-        "views": "Aufrufe",
-        "local_views": "Lokale Aufrufe",
         "created": "Erstellt"
       },
       "VideoOrder": {

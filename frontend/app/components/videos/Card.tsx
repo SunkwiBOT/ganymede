@@ -7,7 +7,7 @@ import duration from "dayjs/plugin/duration";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 import classes from "./Card.module.css"
 import { env } from "next-runtime-env";
-import { durationToTime, escapeURL, prettyNumber } from "@/app/util/util";
+import { durationToTime, escapeURL } from "@/app/util/util";
 import { PlaybackStatus, useFetchPlaybackForVideo } from "@/app/hooks/usePlayback";
 import { useAxiosPrivate } from "@/app/hooks/useAxios";
 import useAuthStore from "@/app/store/useAuthStore";
@@ -25,7 +25,6 @@ type Props = {
   showProgress: boolean;
   showMenu: boolean;
   showChannel: boolean;
-  showViewCount?: boolean;
   selectable?: boolean;
   selected?: boolean;
   onSelectionChange?: (selected: boolean) => void;
@@ -36,7 +35,6 @@ const VideoCard = ({
   showProgress = true,
   showMenu = true,
   showChannel = true,
-  showViewCount = true,
   selectable = false,
   selected = false,
   onSelectionChange = () => { },
@@ -203,20 +201,6 @@ const VideoCard = ({
         </Tooltip>
 
         <div className={classes.vodMenu}>
-          <Box pt={4} pr={5}>
-            {showViewCount && (
-              <Tooltip
-                multiline
-                label={`${video.views} ${t('sourceViewsText')}
-               ${video.local_views ?? 0} ${t('localViewsText')}`}
-              >
-                <Text size="sm">
-                  {prettyNumber(video.views)} {t('viewsText')}
-                </Text>
-              </Tooltip>
-            )}
-          </Box>
-
           <Badge variant="default" color="rgba(0, 0, 0, 1)" mt={4}>
             {video.type.toUpperCase()}
           </Badge>

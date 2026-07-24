@@ -629,7 +629,6 @@ func getVariableMap(channelItem *ent.Channel, vodItem *ent.Vod, qItem *ent.Queue
 		"vod_type":        "",
 		"vod_title":       "",
 		"vod_duration":    0,
-		"vod_views":       0,
 		"vod_resolution":  "",
 		"vod_streamed_at": "",
 		"vod_created_at":  "",
@@ -652,7 +651,6 @@ func getVariableMap(channelItem *ent.Channel, vodItem *ent.Vod, qItem *ent.Queue
 		variables["vod_type"] = vodItem.Type
 		variables["vod_title"] = vodItem.Title
 		variables["vod_duration"] = vodItem.Duration
-		variables["vod_views"] = vodItem.Views
 		variables["vod_resolution"] = vodItem.Resolution
 		variables["vod_streamed_at"] = formatTime(vodItem.StreamedAt)
 		variables["vod_created_at"] = formatTime(vodItem.CreatedAt)
@@ -681,7 +679,6 @@ func getTestVariableMap() map[string]interface{} {
 		"vod_type":             "archive",
 		"vod_title":            "Demo Notification Title",
 		"vod_duration":         100,
-		"vod_views":            4510,
 		"vod_resolution":       "best",
 		"vod_streamed_at":      now,
 		"vod_created_at":       now,

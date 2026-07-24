@@ -367,14 +367,12 @@ func (VodType) Values() (kinds []string) {
 type VideoSort string
 
 const (
-	SortDate       VideoSort = "date"        // streamed at / published at / upload date
-	SortViews      VideoSort = "views"       // views from platform
-	SortLocalViews VideoSort = "local_views" // views from Ganymede
-	SortCreated    VideoSort = "created"     // when the vod was created in Ganymede
+	SortDate    VideoSort = "date"    // streamed at / published at / upload date
+	SortCreated VideoSort = "created" // when the vod was created in Ganymede
 )
 
 func (VideoSort) Values() (kinds []string) {
-	for _, s := range []VideoSort{SortDate, SortViews, SortLocalViews, SortCreated} {
+	for _, s := range []VideoSort{SortDate, SortCreated} {
 		kinds = append(kinds, string(s))
 	}
 	return

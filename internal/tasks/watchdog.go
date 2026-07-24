@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/zibbp/ganymede/ent"
 	entQueue "github.com/zibbp/ganymede/ent/queue"
 	"github.com/zibbp/ganymede/internal/database"
+	tasks_shared "github.com/zibbp/ganymede/internal/tasks/shared"
 	"github.com/zibbp/ganymede/internal/utils"
 )
 
@@ -28,6 +30,16 @@ func (w WatchdogArgs) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
 		MaxAttempts: 1,
 		Queue:       "default",
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStateAvailable,
+				rivertype.JobStatePending,
+				rivertype.JobStateRunning,
+				rivertype.JobStateRetryable,
+				rivertype.JobStateScheduled,
+			},
+		},
 	}
 }
 
@@ -48,6 +60,14 @@ func (w WatchdogWorker) Work(ctx context.Context, job *river.Job[WatchdogArgs]) 
 	}
 
 	return nil
+}
+
+// RecoverInterruptedLiveArchives runs the watchdog recovery pass before the
+// worker starts accepting jobs. This closes/finalizes crash-left live sources
+// before a new live check can start the continuation recording.
+func RecoverInterruptedLiveArchives(ctx context.Context, store *database.Database, riverClient *river.Client[pgx.Tx]) error {
+	recoveryCtx := context.WithValue(ctx, tasks_shared.StoreKey, store)
+	return runWatchdog(recoveryCtx, riverClient)
 }
 
 // Watchdog tasks that checks the status of archive jobs every minute. It checks if the job is still running and if it has timed out. If it has timed out, it sets the status of the job to retryable.
@@ -77,10 +97,34 @@ func runWatchdog(ctx context.Context, riverClient *river.Client[pgx.Tx]) error {
 				return err
 			}
 
-			// check if job has timed out
-			if !args.Input.HeartBeatTime.IsZero() && time.Since(args.Input.HeartBeatTime) > 90*time.Second {
+			// Check if the job has timed out. Preserve the existing heartbeat
+			// behavior for every archive task, while also treating a live-video
+			// job with no first heartbeat as stale after its River attempt has
+			// been running long enough.
+			jobTimedOut := !args.Input.HeartBeatTime.IsZero() &&
+				time.Since(args.Input.HeartBeatTime) > liveArchiveHeartbeatTimeout
+			if job.Kind == string(utils.TaskDownloadLiveVideo) &&
+				isLiveArchiveJobStale(job, args, time.Now()) {
+				jobTimedOut = true
+			}
+			if jobTimedOut {
 				// job heartbeat timed out
 				logger.Info().Str("job_id", fmt.Sprintf("%d", job.ID)).Msg("job heartbeat timed out")
+
+				// Never restart a stale live capture into the same temporary
+				// output: ffmpeg uses overwrite mode and would destroy the
+				// partial recording left by the crashed process. Retire the
+				// stale job, finalize the captured segment, then let the next
+				// live check create a fresh archive for the remainder.
+				if job.Kind == string(utils.TaskDownloadLiveVideo) {
+					if err := retireStaleLiveVideoJob(ctx, store, riverClient, job.ID); err != nil {
+						return err
+					}
+					if err := recoverInterruptedLiveVideoArchive(ctx, store, riverClient, args.Input.QueueId); err != nil {
+						return err
+					}
+					continue
+				}
 
 				if job.Attempt < job.MaxAttempts {
 					// set job to retryable
@@ -100,15 +144,6 @@ func runWatchdog(ctx context.Context, riverClient *river.Client[pgx.Tx]) error {
 						return err
 					}
 					logger.Info().Str("job_id", fmt.Sprintf("%d", job.ID)).Msg("job set to failed and deleted")
-
-					// attempt to finish archiving live video
-					// if job was live video download then proceed with next jobs
-					if job.Kind == string(utils.TaskDownloadLiveVideo) {
-						logger.Info().Str("job_id", fmt.Sprintf("%d", job.ID)).Msg("detected job was live video download; proceeding with next jobs")
-						if err := recoverInterruptedLiveVideoArchive(ctx, store, riverClient, args.Input.QueueId); err != nil {
-							return err
-						}
-					}
 
 					// if job was chat download then proceed with next jobs
 					if job.Kind == string(utils.TaskDownloadLiveChat) {
@@ -153,6 +188,24 @@ func runWatchdog(ctx context.Context, riverClient *river.Client[pgx.Tx]) error {
 		return err
 	}
 
+	return nil
+}
+
+func retireStaleLiveVideoJob(ctx context.Context, store *database.Database, riverClient *river.Client[pgx.Tx], jobID int64) error {
+	if _, err := riverClient.JobCancel(ctx, jobID); err != nil && !errors.Is(err, rivertype.ErrNotFound) {
+		return fmt.Errorf("failed to cancel stale live video job %d: %w", jobID, err)
+	}
+
+	if err := forceDeleteJob(ctx, store.ConnPool, jobID); err != nil {
+		// The row can disappear between cancellation and forced deletion if a
+		// worker finishes concurrently. Treat that as already retired.
+		if _, getErr := riverClient.JobGet(ctx, jobID); errors.Is(getErr, rivertype.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("failed to delete stale live video job %d: %w", jobID, err)
+	}
+
+	log.Info().Int64("job_id", jobID).Msg("retired stale live video download job")
 	return nil
 }
 

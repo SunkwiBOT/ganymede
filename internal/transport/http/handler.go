@@ -23,6 +23,7 @@ import (
 	"github.com/zibbp/ganymede/internal/api_key"
 	"github.com/zibbp/ganymede/internal/config"
 	"github.com/zibbp/ganymede/internal/database"
+	"github.com/zibbp/ganymede/internal/livestream"
 	"github.com/zibbp/ganymede/internal/platform"
 	"github.com/zibbp/ganymede/internal/utils"
 	"riverqueue.com/riverui"
@@ -54,6 +55,7 @@ type Handler struct {
 	Service        Services
 	SessionManager *scs.SessionManager
 	RiverUIServer  *riverui.Handler
+	LivePlayback   *livestream.Manager
 }
 
 var sessionManager *scs.SessionManager
@@ -104,6 +106,7 @@ func NewHandler(database *database.Database, authService AuthService, channelSer
 		},
 		SessionManager: sessionManager,
 		RiverUIServer:  riverUIServer,
+		LivePlayback:   livestream.NewManager(),
 	}
 
 	// Enable gzip compression for API routes only.
@@ -117,7 +120,9 @@ func NewHandler(database *database.Database, authService AuthService, channelSer
 	// outer layer — leaving raw gzip bytes as the page body.
 	h.Server.Use(middleware.GzipWithConfig(middleware.GzipConfig{
 		Skipper: func(c echo.Context) bool {
-			return !strings.HasPrefix(c.Request().URL.Path, "/api/")
+			requestPath := c.Request().URL.Path
+			return !strings.HasPrefix(requestPath, "/api/") ||
+				strings.HasPrefix(requestPath, "/api/v1/live/playback/")
 		},
 	}))
 
@@ -350,6 +355,9 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	liveGroup.PUT("/:id", h.UpdateLiveWatchedChannel, SessionOrAPIKey(utils.EditorRole, utils.ApiKeyScopeLiveWrite))
 	liveGroup.DELETE("/:id", h.DeleteLiveWatchedChannel, SessionOrAPIKey(utils.EditorRole, utils.ApiKeyScopeLiveWrite))
 	liveGroup.GET("/check", h.Check, SessionOrAPIKey(utils.EditorRole, utils.ApiKeyScopeLiveRead))
+	liveGroup.GET("/playback/:login", h.StartLivePlayback, PublicUnlessRequireLogin(utils.ApiKeyScopeLiveRead))
+	liveGroup.GET("/playback/session/:session/master.m3u8", h.GetLivePlaybackMaster, PublicUnlessRequireLogin(utils.ApiKeyScopeLiveRead))
+	liveGroup.GET("/playback/session/:session/resource", h.ProxyLivePlaybackResource, PublicUnlessRequireLogin(utils.ApiKeyScopeLiveRead))
 	// liveGroup.GET("/vod", h.CheckVodWatchedChannels, SessionRole(utils.EditorRole))
 	// liveGroup.POST("/archive", h.ArchiveLiveChannel, SessionRole(utils.ArchiverRole))
 
@@ -361,7 +369,6 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	playbackGroup.POST("/status", h.UpdateStatus, SessionOnly)
 	playbackGroup.DELETE("/:id", h.DeleteProgress, SessionOnly)
 	playbackGroup.GET("/last", h.GetLastPlaybacks, SessionOnly)
-	playbackGroup.POST("/start", h.StartPlayback, RequireLoginMiddleware)
 
 	// Playlist
 	//

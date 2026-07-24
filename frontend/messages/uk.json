@@ -13,6 +13,19 @@
     "loading": "Завантаження відео",
     "error": "Помилка завантаження відео"
   },
+  "LivePage": {
+    "pageTitle": "Дивитися пряму трансляцію",
+    "formMessage": "Введіть логін або URL каналу Twitch. Трансляція тимчасово передається через Ganymede без створення запису.",
+    "channelPlaceholder": "Логін або URL каналу Twitch",
+    "watchButton": "Дивитися наживо",
+    "invalidChannel": "Введіть дійсний логін каналу Twitch.",
+    "loadingPlayer": "Завантаження програвача Twitch",
+    "unavailableTitle": "Трансляція недоступна",
+    "unavailableMessage": "Канал офлайн, не існує або трансляція недоступна з поточними налаштуваннями токена та проксі.",
+    "retry": "Спробувати ще раз",
+    "temporaryBadge": "Тимчасово",
+    "temporaryTooltip": "Ретрансляція наживо; у тимчасову теку або теку відео нічого не зберігається"
+  },
   "SearchPage": {
     "title": "Пошук",
     "error": "Помилка завантаження результатів пошуку",
@@ -125,6 +138,7 @@
     "links": {
       "home": "Головна",
       "channels": "Канали",
+      "live": "Наживо",
       "videos": "Відео",
       "archive": "Архів",
       "playlists": "Плейлісти",
@@ -618,7 +632,6 @@
     "typeLabel": "Тип",
     "platformLabel": "Платформа",
     "durationLabel": "Тривалість (секунди)",
-    "viewCountLabel": "Кількість переглядів",
     "resolutionLabel": "Роздільна здатність",
     "streamedAtLabel": "Дата трансляції",
     "thumbnailPathLabel": "Шлях до мініатюри",
@@ -813,9 +826,7 @@
     "watchedVideoText": "Ви вже переглянули це відео",
     "lockedText": "Відео захищено",
     "streamedOnText": "Трансляція від",
-    "sourceViewsText": "перегляди джерела",
-    "localViewsText": "локальні перегляди",
-    "viewsText": "переглядів",
+    "liveElapsedTooltip": "Час від початку трансляції",
     "loadingVideos": "Завантаження відео",
     "errorLoadingVideos": "Помилка завантаження відео",
     "loadingChatHistogram": "Завантаження гістограми чату",
@@ -902,8 +913,6 @@
     "hideChatIconTooltip": "Приховати чат",
     "showChatIconTooltip": "Показати чат",
     "absoluteTimeIconTooltip": "Перемкнути абсолютний час",
-    "sourceViewsTooltip": "перегляди джерела",
-    "localViewsTooltip": "локальні перегляди",
     "streamedOnTooltip": "Трансляція від",
     "videoTypeTooltip": "Тип відео",
     "videoClipsTitle": "Кліпи відео",
@@ -911,8 +920,6 @@
     "enums": {
       "VideoSortBy": {
         "date": "Дата",
-        "views": "Перегляди",
-        "local_views": "Локальні перегляди",
         "created": "Створено"
       },
       "VideoOrder": {

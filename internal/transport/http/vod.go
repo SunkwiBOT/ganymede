@@ -57,7 +57,6 @@ type CreateVodRequest struct {
 	Type             utils.VodType       `json:"type" validate:"required,oneof=archive live highlight upload clip"`
 	Title            string              `json:"title" validate:"required,min=1"`
 	Duration         int                 `json:"duration" validate:"required"`
-	Views            int                 `json:"views" validate:"required"`
 	Resolution       string              `json:"resolution"`
 	Processing       bool                `json:"processing"`
 	ThumbnailPath    string              `json:"thumbnail_path"`
@@ -76,7 +75,7 @@ type SearchQueryParams struct {
 	Limit  int             `query:"limit" default:"10" validate:"number"`
 	Offset int             `query:"offset" default:"0" validate:"number"`
 	Fields []string        `validate:"dive,oneof=title id ext_id chapter channel_name channel_id channel_ext_id"`
-	SortBy utils.VideoSort `query:"sort_by" default:"date" validate:"oneof=date views local_views created"`
+	SortBy utils.VideoSort `query:"sort_by" default:"date" validate:"oneof=date created"`
 	Order  utils.SortOrder `query:"order" default:"desc" validate:"oneof=asc desc"`
 }
 
@@ -133,7 +132,6 @@ func (h *Handler) CreateVod(c echo.Context) error {
 		Type:             req.Type,
 		Title:            req.Title,
 		Duration:         req.Duration,
-		Views:            req.Views,
 		Resolution:       req.Resolution,
 		Processing:       req.Processing,
 		ThumbnailPath:    req.ThumbnailPath,
@@ -342,7 +340,6 @@ func (h *Handler) UpdateVod(c echo.Context) error {
 		Type:             req.Type,
 		Title:            req.Title,
 		Duration:         req.Duration,
-		Views:            req.Views,
 		Resolution:       req.Resolution,
 		Processing:       req.Processing,
 		ThumbnailPath:    req.ThumbnailPath,
@@ -554,7 +551,7 @@ func (h *Handler) GetVodsPagination(c echo.Context) error {
 	var sortBy utils.VideoSort
 	if vSortBy != "" {
 		sortBy = utils.VideoSort(vSortBy)
-		if sortBy != utils.SortDate && sortBy != utils.SortViews && sortBy != utils.SortLocalViews && sortBy != utils.SortCreated {
+		if sortBy != utils.SortDate && sortBy != utils.SortCreated {
 			return ErrorResponse(c, http.StatusBadRequest, "invalid sort_by option, must be one of: "+strings.Join(utils.VideoSort("").Values(), ", "))
 		}
 	} else {

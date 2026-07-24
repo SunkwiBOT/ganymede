@@ -18,6 +18,7 @@ import (
 	"github.com/zibbp/ganymede/internal/notification"
 	"github.com/zibbp/ganymede/internal/platform"
 	"github.com/zibbp/ganymede/internal/queue"
+	"github.com/zibbp/ganymede/internal/tasks"
 	tasks_client "github.com/zibbp/ganymede/internal/tasks/client"
 	tasks_worker "github.com/zibbp/ganymede/internal/tasks/worker"
 	"github.com/zibbp/ganymede/internal/vod"
@@ -95,6 +96,13 @@ func SetupWorker(ctx context.Context) (*tasks_worker.RiverWorkerClient, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Recover any live segment left behind by an abrupt process/container stop
+	// before periodic live checks are registered. The old source is queued for
+	// finalization and no longer blocks a fresh capture of the same live.
+	if err := tasks.RecoverInterruptedLiveArchives(ctx, db, riverWorkerClient.Client); err != nil {
+		log.Warn().Err(err).Msg("initial interrupted live archive recovery failed; the watchdog will retry")
 	}
 
 	if err := liveService.ResetLiveStatus(ctx); err != nil {

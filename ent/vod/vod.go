@@ -33,8 +33,6 @@ const (
 	FieldDuration = "duration"
 	// FieldClipVodOffset holds the string denoting the clip_vod_offset field in the database.
 	FieldClipVodOffset = "clip_vod_offset"
-	// FieldViews holds the string denoting the views field in the database.
-	FieldViews = "views"
 	// FieldResolution holds the string denoting the resolution field in the database.
 	FieldResolution = "resolution"
 	// FieldProcessing holds the string denoting the processing field in the database.
@@ -79,8 +77,6 @@ const (
 	FieldTmpVideoHlsPath = "tmp_video_hls_path"
 	// FieldLocked holds the string denoting the locked field in the database.
 	FieldLocked = "locked"
-	// FieldLocalViews holds the string denoting the local_views field in the database.
-	FieldLocalViews = "local_views"
 	// FieldSpriteThumbnailsEnabled holds the string denoting the sprite_thumbnails_enabled field in the database.
 	FieldSpriteThumbnailsEnabled = "sprite_thumbnails_enabled"
 	// FieldSpriteThumbnailsImages holds the string denoting the sprite_thumbnails_images field in the database.
@@ -170,7 +166,6 @@ var Columns = []string{
 	FieldTitle,
 	FieldDuration,
 	FieldClipVodOffset,
-	FieldViews,
 	FieldResolution,
 	FieldProcessing,
 	FieldThumbnailPath,
@@ -193,7 +188,6 @@ var Columns = []string{
 	FieldTmpChatRenderPath,
 	FieldTmpVideoHlsPath,
 	FieldLocked,
-	FieldLocalViews,
 	FieldSpriteThumbnailsEnabled,
 	FieldSpriteThumbnailsImages,
 	FieldSpriteThumbnailsInterval,
@@ -237,14 +231,10 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultDuration holds the default value on creation for the "duration" field.
 	DefaultDuration int
-	// DefaultViews holds the default value on creation for the "views" field.
-	DefaultViews int
 	// DefaultProcessing holds the default value on creation for the "processing" field.
 	DefaultProcessing bool
 	// DefaultLocked holds the default value on creation for the "locked" field.
 	DefaultLocked bool
-	// DefaultLocalViews holds the default value on creation for the "local_views" field.
-	DefaultLocalViews int
 	// DefaultSpriteThumbnailsEnabled holds the default value on creation for the "sprite_thumbnails_enabled" field.
 	DefaultSpriteThumbnailsEnabled bool
 	// DefaultStorageSizeBytes holds the default value on creation for the "storage_size_bytes" field.
@@ -331,11 +321,6 @@ func ByDuration(opts ...sql.OrderTermOption) OrderOption {
 // ByClipVodOffset orders the results by the clip_vod_offset field.
 func ByClipVodOffset(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldClipVodOffset, opts...).ToFunc()
-}
-
-// ByViews orders the results by the views field.
-func ByViews(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldViews, opts...).ToFunc()
 }
 
 // ByResolution orders the results by the resolution field.
@@ -446,11 +431,6 @@ func ByTmpVideoHlsPath(opts ...sql.OrderTermOption) OrderOption {
 // ByLocked orders the results by the locked field.
 func ByLocked(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldLocked, opts...).ToFunc()
-}
-
-// ByLocalViews orders the results by the local_views field.
-func ByLocalViews(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldLocalViews, opts...).ToFunc()
 }
 
 // BySpriteThumbnailsEnabled orders the results by the sprite_thumbnails_enabled field.

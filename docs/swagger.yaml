@@ -188,6 +188,10 @@ definitions:
         type: array
       is_action:
         type: boolean
+      is_first_message:
+        type: boolean
+      reply:
+        $ref: '#/definitions/chat.Reply'
       user_badges:
         items:
           $ref: '#/definitions/chat.UserBadge'
@@ -196,6 +200,19 @@ definitions:
         type: string
       user_notice_params:
         $ref: '#/definitions/chat.UserNoticeParams'
+    type: object
+  chat.Reply:
+    properties:
+      parent_display_name:
+        type: string
+      parent_msg_body:
+        type: string
+      parent_msg_id:
+        type: string
+      parent_user_id:
+        type: string
+      parent_user_login:
+        type: string
     type: object
   chat.UserBadge:
     properties:
@@ -206,6 +223,12 @@ definitions:
   chat.UserNoticeParams:
     properties:
       msg_id: {}
+      params:
+        additionalProperties:
+          type: string
+        type: object
+      system_msg:
+        type: string
     type: object
   config.Config:
     properties:
@@ -953,9 +976,6 @@ definitions:
       live_chat_path:
         description: Path to the raw live chat file
         type: string
-      local_views:
-        description: LocalViews holds the value of the "local_views" field.
-        type: integer
       locked:
         description: Locked holds the value of the "locked" field.
         type: boolean
@@ -1045,9 +1065,6 @@ definitions:
       video_path:
         description: VideoPath holds the value of the "video_path" field.
         type: string
-      views:
-        description: Views holds the value of the "views" field.
-        type: integer
       web_thumbnail_path:
         description: WebThumbnailPath holds the value of the "web_thumbnail_path"
           field.
@@ -1334,8 +1351,6 @@ definitions:
       video_path:
         minLength: 1
         type: string
-      views:
-        type: integer
       web_thumbnail_path:
         minLength: 1
         type: string
@@ -1347,8 +1362,22 @@ definitions:
     - title
     - type
     - video_path
-    - views
     - web_thumbnail_path
+    type: object
+  http.LivePlaybackResponse:
+    properties:
+      display_name:
+        type: string
+      login:
+        type: string
+      playback_url:
+        type: string
+      profile_image_url:
+        type: string
+      started_at:
+        type: string
+      title:
+        type: string
     type: object
   http.LoginRequest:
     properties:
@@ -2957,6 +2986,34 @@ paths:
       summary: Update watched channel
       tags:
       - Live
+  /live/playback/{login}:
+    get:
+      description: Resolve a Twitch live stream using Ganymede's configured OAuth
+        token and livestream proxies. No VOD or queue item is created.
+      parameters:
+      - description: Twitch channel login
+        in: path
+        name: login
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/http.LivePlaybackResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+      summary: Start temporary live playback
+      tags:
+      - Live
   /notification:
     get:
       consumes:
@@ -3278,35 +3335,6 @@ paths:
       security:
       - ApiKeyCookieAuth: []
       summary: Get progress
-      tags:
-      - Playback
-  /playback/start:
-    post:
-      consumes:
-      - application/json
-      description: Adds a view to the video local view count
-      parameters:
-      - description: vod id
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: string
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-      summary: Start playback
       tags:
       - Playback
   /playback/status:

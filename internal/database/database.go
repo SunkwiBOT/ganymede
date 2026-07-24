@@ -157,6 +157,14 @@ func dropOrphanedColumns(ctx context.Context, conn *pgxpool.Conn) {
 			name: "api_keys.scope",
 			sql:  "ALTER TABLE api_keys DROP COLUMN IF EXISTS scope",
 		},
+		{
+			name: "vods.views",
+			sql:  "ALTER TABLE vods DROP COLUMN IF EXISTS views",
+		},
+		{
+			name: "vods.local_views",
+			sql:  "ALTER TABLE vods DROP COLUMN IF EXISTS local_views",
+		},
 	}
 	for _, s := range statements {
 		if _, err := conn.Exec(ctx, s.sql); err != nil {

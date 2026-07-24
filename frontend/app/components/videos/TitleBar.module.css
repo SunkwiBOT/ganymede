@@ -15,6 +15,15 @@
   padding-left: 10px;
   padding-right: 10px;
 }
+.channelAvatarLink {
+  display: flex;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+.channelAvatarLink:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 2px;
+}
 .titleBarTitle {
   flex: 0 1 auto;
   min-width: 0;
@@ -28,6 +37,9 @@
   display: flex;
   align-items: center;
   margin-right: 5px;
+}
+.liveElapsedTime {
+  font-variant-numeric: tabular-nums;
 }
 .typeBadge {
   padding-left: 5px;

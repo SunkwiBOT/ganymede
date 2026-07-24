@@ -435,7 +435,6 @@ var (
 		{Name: "title", Type: field.TypeString},
 		{Name: "duration", Type: field.TypeInt, Default: 1},
 		{Name: "clip_vod_offset", Type: field.TypeInt, Nullable: true},
-		{Name: "views", Type: field.TypeInt, Default: 1},
 		{Name: "resolution", Type: field.TypeString, Nullable: true},
 		{Name: "processing", Type: field.TypeBool, Default: false},
 		{Name: "thumbnail_path", Type: field.TypeString, Nullable: true},
@@ -458,7 +457,6 @@ var (
 		{Name: "tmp_chat_render_path", Type: field.TypeString, Nullable: true},
 		{Name: "tmp_video_hls_path", Type: field.TypeString, Nullable: true},
 		{Name: "locked", Type: field.TypeBool, Default: false},
-		{Name: "local_views", Type: field.TypeInt, Default: 0},
 		{Name: "sprite_thumbnails_enabled", Type: field.TypeBool, Default: false},
 		{Name: "sprite_thumbnails_images", Type: field.TypeJSON, Nullable: true},
 		{Name: "sprite_thumbnails_interval", Type: field.TypeInt, Nullable: true},
@@ -480,7 +478,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "vods_channels_vods",
-				Columns:    []*schema.Column{VodsColumns[44]},
+				Columns:    []*schema.Column{VodsColumns[42]},
 				RefColumns: []*schema.Column{ChannelsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

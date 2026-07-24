@@ -135,7 +135,7 @@ func TestGetVariableMap(t *testing.T) {
 		for _, key := range []string{
 			"failed_task", "category", "channel_id", "channel_ext_id", "channel_display_name",
 			"vod_id", "vod_ext_id", "vod_platform", "vod_type", "vod_title", "vod_duration",
-			"vod_views", "vod_resolution", "vod_streamed_at", "vod_created_at", "queue_id", "queue_created_at",
+			"vod_resolution", "vod_streamed_at", "vod_created_at", "queue_id", "queue_created_at",
 		} {
 			if _, ok := m[key]; !ok {
 				t.Fatalf("expected key %q to exist", key)
@@ -144,9 +144,6 @@ func TestGetVariableMap(t *testing.T) {
 
 		if m["vod_duration"] != 0 {
 			t.Fatalf("expected default vod_duration=0, got %#v", m["vod_duration"])
-		}
-		if m["vod_views"] != 0 {
-			t.Fatalf("expected default vod_views=0, got %#v", m["vod_views"])
 		}
 		if m["vod_created_at"] != "" {
 			t.Fatalf("expected default vod_created_at empty, got %#v", m["vod_created_at"])
@@ -173,7 +170,6 @@ func TestGetVariableMap(t *testing.T) {
 				Type:       utils.VodType("archive"),
 				Title:      "Title",
 				Duration:   123,
-				Views:      456,
 				Resolution: "1080p60",
 				StreamedAt: streamedAt,
 				CreatedAt:  createdAt,

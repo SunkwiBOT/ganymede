@@ -9,8 +9,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/rs/zerolog/log"
 )
+
+const liveArchiveHeartbeatTimeout = 90 * time.Second
 
 type RiverJobRow struct {
 	ID    int64
@@ -55,6 +58,31 @@ func startHeartBeatForTask(ctx context.Context, input HeartBeatInput) {
 			logger.Debug().Msg("heartbeat updated")
 		}
 	}
+}
+
+// isLiveArchiveJobStale reports whether a running live-video job stopped
+// reporting progress. Older jobs may not have a custom heartbeat yet, so fall
+// back to River's attempt/creation timestamps instead of treating them as
+// permanently active after a process crash.
+func isLiveArchiveJobStale(job *rivertype.JobRow, args RiverJobArgs, now time.Time) bool {
+	if job == nil {
+		return true
+	}
+
+	lastHeartbeat := args.Input.HeartBeatTime
+	if lastHeartbeat.IsZero() {
+		if job.AttemptedAt != nil {
+			lastHeartbeat = *job.AttemptedAt
+		} else {
+			lastHeartbeat = job.CreatedAt
+		}
+	}
+
+	if lastHeartbeat.IsZero() {
+		return false
+	}
+
+	return now.Sub(lastHeartbeat) > liveArchiveHeartbeatTimeout
 }
 
 func updateHeartbeat(ctx context.Context, input HeartBeatInput) error {
