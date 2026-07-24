@@ -3863,6 +3863,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/vod/{id}/chat/chatter/{chatter_id}": {
+            "get": {
+                "description": "Get vod chat comments from a specific chatter",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "vods"
+                ],
+                "summary": "Get vod chat comments from a specific chatter",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vod ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chatter ID",
+                        "name": "chatter_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/chat.Comment"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/vod/{id}/chat/emotes": {
             "get": {
                 "description": "Get vod chat emotes",

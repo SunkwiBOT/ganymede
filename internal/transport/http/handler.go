@@ -262,6 +262,7 @@ func groupV1Routes(e *echo.Group, h *Handler) {
 	vodGroup.GET("/paginate", h.GetVodsPagination, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
 	vodGroup.GET("/pagination", h.GetVodsPagination, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
 	vodGroup.GET("/:id/chat", h.GetVodChatComments, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
+	vodGroup.GET("/:id/chat/chatter/:chatter_id", h.GetVodChatCommentsFromChatter, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
 	vodGroup.GET("/:id/chat/seek", h.GetNumberOfVodChatCommentsFromTime, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
 	vodGroup.GET("/:id/chat/userid", h.GetUserIdFromChat, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
 	vodGroup.GET("/:id/chat/emotes", h.GetChatEmotes, PublicUnlessRequireLogin(utils.ApiKeyScopeVodRead))
