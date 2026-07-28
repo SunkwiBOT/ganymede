@@ -54,7 +54,7 @@ func SetupWorker(ctx context.Context) (*tasks_worker.RiverWorkerClient, error) {
 	})
 
 	riverClient, err := tasks_client.NewRiverClient(tasks_client.RiverClientInput{
-		DB_URL: dbString,
+		Database: db,
 	})
 	if err != nil {
 		return nil, err
@@ -84,10 +84,13 @@ func SetupWorker(ctx context.Context) (*tasks_worker.RiverWorkerClient, error) {
 
 	// initialize river
 	riverWorkerClient, err := tasks_worker.NewRiverWorker(tasks_worker.RiverWorkerInput{
+		Context:                 ctx,
 		DB_URL:                  dbString,
 		DB:                      db,
+		LiveService:             liveService,
 		PlatformTwitch:          platformTwitch,
 		NotificationService:     notificationService,
+		Enqueuer:                riverClient,
 		VideoDownloadWorkers:    envConfig.MaxVideoDownloadExecutions,
 		VideoPostProcessWorkers: envConfig.MaxVideoConvertExecutions,
 		ChatDownloadWorkers:     envConfig.MaxChatDownloadExecutions,
@@ -101,22 +104,12 @@ func SetupWorker(ctx context.Context) (*tasks_worker.RiverWorkerClient, error) {
 	// Recover any live segment left behind by an abrupt process/container stop
 	// before periodic live checks are registered. The old source is queued for
 	// finalization and no longer blocks a fresh capture of the same live.
-	if err := tasks.RecoverInterruptedLiveArchives(ctx, db, riverWorkerClient.Client); err != nil {
+	if err := tasks.RecoverInterruptedLiveArchives(riverWorkerClient.Ctx, riverWorkerClient.Client); err != nil {
 		log.Warn().Err(err).Msg("initial interrupted live archive recovery failed; the watchdog will retry")
 	}
 
 	if err := liveService.ResetLiveStatus(ctx); err != nil {
 		return nil, err
-	}
-
-	// get periodic tasks
-	periodicTasks, err := riverWorkerClient.GetPeriodicTasks(liveService)
-	if err != nil {
-		log.Panic().Err(err).Msg("Error getting periodic tasks")
-	}
-
-	for _, task := range periodicTasks {
-		riverWorkerClient.Client.PeriodicJobs().Add(task)
 	}
 
 	return riverWorkerClient, nil
