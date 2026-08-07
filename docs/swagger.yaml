@@ -237,6 +237,9 @@ definitions:
         type: boolean
       archive:
         properties:
+          generate_nfo_files:
+            description: Generate Kodi-compatible NFO sidecars for archived videos.
+            type: boolean
           generate_sprite_thumbnails:
             description: Generate sprite thumbnails for scrubbing.
             type: boolean
@@ -1584,6 +1587,7 @@ definitions:
         - update_video_storage_usage
         - process_playlist_video_rules
         - update_platform_channels
+        - generate_nfo_files
         type: string
     required:
     - task
@@ -4501,16 +4505,10 @@ paths:
           description: OK
           schema:
             items:
-              items:
-                $ref: '#/definitions/chat.Comment'
-              type: array
+              $ref: '#/definitions/chat.Comment'
             type: array
         "400":
           description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "404":
-          description: Not Found
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
         "500":

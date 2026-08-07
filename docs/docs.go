@@ -3898,21 +3898,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "type": "array",
-                                "items": {
-                                    "$ref": "#/definitions/chat.Comment"
-                                }
+                                "$ref": "#/definitions/chat.Comment"
                             }
                         }
                     },
                     "400": {
                         "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/utils.ErrorResponse"
                         }
@@ -4571,6 +4562,10 @@ const docTemplate = `{
                 "archive": {
                     "type": "object",
                     "properties": {
+                        "generate_nfo_files": {
+                            "description": "Generate Kodi-compatible NFO sidecars for archived videos.",
+                            "type": "boolean"
+                        },
                         "generate_sprite_thumbnails": {
                             "description": "Generate sprite thumbnails for scrubbing.",
                             "type": "boolean"
@@ -6521,7 +6516,8 @@ const docTemplate = `{
                         "generate_sprite_thumbnails",
                         "update_video_storage_usage",
                         "process_playlist_video_rules",
-                        "update_platform_channels"
+                        "update_platform_channels",
+                        "generate_nfo_files"
                     ]
                 }
             }
