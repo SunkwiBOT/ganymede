@@ -419,6 +419,20 @@ func (_c *VodCreate) SetNillableLocked(v *bool) *VodCreate {
 	return _c
 }
 
+// SetNotes sets the "notes" field.
+func (_c *VodCreate) SetNotes(v string) *VodCreate {
+	_c.mutation.SetNotes(v)
+	return _c
+}
+
+// SetNillableNotes sets the "notes" field if the given value is not nil.
+func (_c *VodCreate) SetNillableNotes(v *string) *VodCreate {
+	if v != nil {
+		_c.SetNotes(*v)
+	}
+	return _c
+}
+
 // SetSpriteThumbnailsEnabled sets the "sprite_thumbnails_enabled" field.
 func (_c *VodCreate) SetSpriteThumbnailsEnabled(v bool) *VodCreate {
 	_c.mutation.SetSpriteThumbnailsEnabled(v)
@@ -962,6 +976,10 @@ func (_c *VodCreate) createSpec() (*Vod, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Locked(); ok {
 		_spec.SetField(vod.FieldLocked, field.TypeBool, value)
 		_node.Locked = value
+	}
+	if value, ok := _c.mutation.Notes(); ok {
+		_spec.SetField(vod.FieldNotes, field.TypeString, value)
+		_node.Notes = value
 	}
 	if value, ok := _c.mutation.SpriteThumbnailsEnabled(); ok {
 		_spec.SetField(vod.FieldSpriteThumbnailsEnabled, field.TypeBool, value)
@@ -1651,6 +1669,24 @@ func (u *VodUpsert) SetLocked(v bool) *VodUpsert {
 // UpdateLocked sets the "locked" field to the value that was provided on create.
 func (u *VodUpsert) UpdateLocked() *VodUpsert {
 	u.SetExcluded(vod.FieldLocked)
+	return u
+}
+
+// SetNotes sets the "notes" field.
+func (u *VodUpsert) SetNotes(v string) *VodUpsert {
+	u.Set(vod.FieldNotes, v)
+	return u
+}
+
+// UpdateNotes sets the "notes" field to the value that was provided on create.
+func (u *VodUpsert) UpdateNotes() *VodUpsert {
+	u.SetExcluded(vod.FieldNotes)
+	return u
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (u *VodUpsert) ClearNotes() *VodUpsert {
+	u.SetNull(vod.FieldNotes)
 	return u
 }
 
@@ -2475,6 +2511,27 @@ func (u *VodUpsertOne) SetLocked(v bool) *VodUpsertOne {
 func (u *VodUpsertOne) UpdateLocked() *VodUpsertOne {
 	return u.Update(func(s *VodUpsert) {
 		s.UpdateLocked()
+	})
+}
+
+// SetNotes sets the "notes" field.
+func (u *VodUpsertOne) SetNotes(v string) *VodUpsertOne {
+	return u.Update(func(s *VodUpsert) {
+		s.SetNotes(v)
+	})
+}
+
+// UpdateNotes sets the "notes" field to the value that was provided on create.
+func (u *VodUpsertOne) UpdateNotes() *VodUpsertOne {
+	return u.Update(func(s *VodUpsert) {
+		s.UpdateNotes()
+	})
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (u *VodUpsertOne) ClearNotes() *VodUpsertOne {
+	return u.Update(func(s *VodUpsert) {
+		s.ClearNotes()
 	})
 }
 
@@ -3498,6 +3555,27 @@ func (u *VodUpsertBulk) SetLocked(v bool) *VodUpsertBulk {
 func (u *VodUpsertBulk) UpdateLocked() *VodUpsertBulk {
 	return u.Update(func(s *VodUpsert) {
 		s.UpdateLocked()
+	})
+}
+
+// SetNotes sets the "notes" field.
+func (u *VodUpsertBulk) SetNotes(v string) *VodUpsertBulk {
+	return u.Update(func(s *VodUpsert) {
+		s.SetNotes(v)
+	})
+}
+
+// UpdateNotes sets the "notes" field to the value that was provided on create.
+func (u *VodUpsertBulk) UpdateNotes() *VodUpsertBulk {
+	return u.Update(func(s *VodUpsert) {
+		s.UpdateNotes()
+	})
+}
+
+// ClearNotes clears the value of the "notes" field.
+func (u *VodUpsertBulk) ClearNotes() *VodUpsertBulk {
+	return u.Update(func(s *VodUpsert) {
+		s.ClearNotes()
 	})
 }
 

@@ -13,6 +13,8 @@ services:
       - TEMP_DIR=/data/temp
       - LOGS_DIR=/data/logs
       - CONFIG_DIR=/data/config
+      # Set to true if your storage does not support chown (e.g. NFS/SMB)
+      # - SKIP_CHOWN=false
       # Database settings
       - DB_HOST=ganymede-db
       - DB_PORT=5432
@@ -29,6 +31,8 @@ services:
       - MAX_VIDEO_DOWNLOAD_EXECUTIONS=2
       - MAX_VIDEO_CONVERT_EXECUTIONS=3
       - MAX_VIDEO_SPRITE_THUMBNAIL_EXECUTIONS=2
+      # - DISABLE_LIVE_ARCHIVE_STALL_CHECK=false # Set true to disable FFmpeg progress stall detection
+      # - LIVE_ARCHIVE_STALL_TIMEOUT_SECONDS=180 # Minimum 30 seconds
       # Optional OAuth settings
       # - OAUTH_ENABLED=false
       # - OAUTH_PROVIDER_URL=

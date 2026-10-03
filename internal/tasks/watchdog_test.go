@@ -1,8 +1,6 @@
 package tasks
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -20,6 +18,7 @@ func TestStaleLiveArchiveRecoveryAction(t *testing.T) {
 	tests := []struct {
 		name          string
 		metadata      string
+		kind          string
 		wantAction    staleLiveArchiveAction
 		wantRemaining time.Duration
 		wantErr       string
@@ -27,22 +26,32 @@ func TestStaleLiveArchiveRecoveryAction(t *testing.T) {
 		{
 			name:       "requests cancellation when River has no cancellation marker",
 			metadata:   `{"output":{"heartbeat_at":"2026-07-22T19:58:00Z"}}`,
+			kind:       string(utils.TaskDownloadLiveVideo),
 			wantAction: staleLiveArchiveActionCancel,
 		},
 		{
 			name:          "waits for a worker inside its finalization window",
 			metadata:      `{"cancel_attempted_at":"2026-07-22T19:59:00Z"}`,
+			kind:          string(utils.TaskDownloadLiveVideo),
 			wantAction:    staleLiveArchiveActionWait,
-			wantRemaining: liveArchiveCancellationGrace - time.Minute,
+			wantRemaining: liveArchiveVideoCancellationGrace - time.Minute,
 		},
 		{
 			name:       "recovers after the worker missed its finalization window",
-			metadata:   `{"cancel_attempted_at":"2026-07-22T19:55:00Z"}`,
+			metadata:   `{"cancel_attempted_at":"2026-07-22T19:50:00Z"}`,
+			kind:       string(utils.TaskDownloadLiveVideo),
+			wantAction: staleLiveArchiveActionRecover,
+		},
+		{
+			name:       "uses the shorter chat finalization window",
+			metadata:   `{"cancel_attempted_at":"2026-07-22T19:57:00Z"}`,
+			kind:       string(utils.TaskDownloadLiveChat),
 			wantAction: staleLiveArchiveActionRecover,
 		},
 		{
 			name:     "rejects malformed River metadata",
 			metadata: `{`,
+			kind:     string(utils.TaskDownloadLiveVideo),
 			wantErr:  "decode archive job 42 cancellation metadata",
 		},
 	}
@@ -51,7 +60,7 @@ func TestStaleLiveArchiveRecoveryAction(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			job := &rivertype.JobRow{ID: 42, Metadata: []byte(tt.metadata)}
+			job := &rivertype.JobRow{ID: 42, Kind: tt.kind, Metadata: []byte(tt.metadata)}
 			action, remaining, err := staleLiveArchiveRecoveryAction(job, now)
 			if tt.wantErr != "" {
 				require.ErrorContains(t, err, tt.wantErr)
@@ -65,26 +74,17 @@ func TestStaleLiveArchiveRecoveryAction(t *testing.T) {
 	}
 }
 
-func TestFileIsQuiet(t *testing.T) {
+func TestArchiveJobNeedsWatchdog(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, time.July, 22, 20, 0, 0, 0, time.UTC)
-	path := filepath.Join(t.TempDir(), "capture.ts")
-	require.NoError(t, os.WriteFile(path, []byte("partial media"), 0o600))
+	fresh := now.Add(-time.Minute)
+	stale := now.Add(-archiveHeartbeatTimeout - time.Second)
+	liveVideo := string(utils.TaskDownloadLiveVideo)
 
-	require.NoError(t, os.Chtimes(path, now.Add(-liveArchiveMediaQuietPeriod+time.Second), now.Add(-liveArchiveMediaQuietPeriod+time.Second)))
-	quiet, err := fileIsQuiet(path, now)
-	require.NoError(t, err)
-	require.False(t, quiet)
-
-	require.NoError(t, os.Chtimes(path, now.Add(-liveArchiveMediaQuietPeriod), now.Add(-liveArchiveMediaQuietPeriod)))
-	quiet, err = fileIsQuiet(path, now)
-	require.NoError(t, err)
-	require.True(t, quiet)
-
-	quiet, err = fileIsQuiet(filepath.Join(t.TempDir(), "missing.ts"), now)
-	require.NoError(t, err)
-	require.True(t, quiet)
+	require.False(t, archiveJobNeedsWatchdog(liveVideo, fresh, now))
+	require.True(t, archiveJobNeedsWatchdog(string(utils.TaskDownloadVideo), stale, now))
+	require.False(t, archiveJobNeedsWatchdog(string(utils.TaskDownloadVideo), time.Time{}, now))
 }
 
 func TestLiveArchiveDownloadNeedsRecovery(t *testing.T) {

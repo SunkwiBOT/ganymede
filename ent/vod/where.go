@@ -197,6 +197,11 @@ func Locked(v bool) predicate.Vod {
 	return predicate.Vod(sql.FieldEQ(FieldLocked, v))
 }
 
+// Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
+func Notes(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldEQ(FieldNotes, v))
+}
+
 // SpriteThumbnailsEnabled applies equality check predicate on the "sprite_thumbnails_enabled" field. It's identical to SpriteThumbnailsEnabledEQ.
 func SpriteThumbnailsEnabled(v bool) predicate.Vod {
 	return predicate.Vod(sql.FieldEQ(FieldSpriteThumbnailsEnabled, v))
@@ -2175,6 +2180,81 @@ func LockedEQ(v bool) predicate.Vod {
 // LockedNEQ applies the NEQ predicate on the "locked" field.
 func LockedNEQ(v bool) predicate.Vod {
 	return predicate.Vod(sql.FieldNEQ(FieldLocked, v))
+}
+
+// NotesEQ applies the EQ predicate on the "notes" field.
+func NotesEQ(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldEQ(FieldNotes, v))
+}
+
+// NotesNEQ applies the NEQ predicate on the "notes" field.
+func NotesNEQ(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldNEQ(FieldNotes, v))
+}
+
+// NotesIn applies the In predicate on the "notes" field.
+func NotesIn(vs ...string) predicate.Vod {
+	return predicate.Vod(sql.FieldIn(FieldNotes, vs...))
+}
+
+// NotesNotIn applies the NotIn predicate on the "notes" field.
+func NotesNotIn(vs ...string) predicate.Vod {
+	return predicate.Vod(sql.FieldNotIn(FieldNotes, vs...))
+}
+
+// NotesGT applies the GT predicate on the "notes" field.
+func NotesGT(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldGT(FieldNotes, v))
+}
+
+// NotesGTE applies the GTE predicate on the "notes" field.
+func NotesGTE(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldGTE(FieldNotes, v))
+}
+
+// NotesLT applies the LT predicate on the "notes" field.
+func NotesLT(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldLT(FieldNotes, v))
+}
+
+// NotesLTE applies the LTE predicate on the "notes" field.
+func NotesLTE(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldLTE(FieldNotes, v))
+}
+
+// NotesContains applies the Contains predicate on the "notes" field.
+func NotesContains(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldContains(FieldNotes, v))
+}
+
+// NotesHasPrefix applies the HasPrefix predicate on the "notes" field.
+func NotesHasPrefix(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldHasPrefix(FieldNotes, v))
+}
+
+// NotesHasSuffix applies the HasSuffix predicate on the "notes" field.
+func NotesHasSuffix(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldHasSuffix(FieldNotes, v))
+}
+
+// NotesIsNil applies the IsNil predicate on the "notes" field.
+func NotesIsNil() predicate.Vod {
+	return predicate.Vod(sql.FieldIsNull(FieldNotes))
+}
+
+// NotesNotNil applies the NotNil predicate on the "notes" field.
+func NotesNotNil() predicate.Vod {
+	return predicate.Vod(sql.FieldNotNull(FieldNotes))
+}
+
+// NotesEqualFold applies the EqualFold predicate on the "notes" field.
+func NotesEqualFold(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldEqualFold(FieldNotes, v))
+}
+
+// NotesContainsFold applies the ContainsFold predicate on the "notes" field.
+func NotesContainsFold(v string) predicate.Vod {
+	return predicate.Vod(sql.FieldContainsFold(FieldNotes, v))
 }
 
 // SpriteThumbnailsEnabledEQ applies the EQ predicate on the "sprite_thumbnails_enabled" field.

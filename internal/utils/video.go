@@ -31,6 +31,14 @@ func parseQuality(q string) Quality {
 			// Treat "720" as Resolution=720, FPS=60 (default)
 			return Quality{Resolution: num, FPS: 60, Original: q}
 		}
+
+		// Twitch clips may expose format IDs such as "1080-0" and "720-1".
+		// The prefix is the video height; the suffix distinguishes variants.
+		twitchClipFormat := regexp.MustCompile(`^(\d+)-\d+$`)
+		if clipMatches := twitchClipFormat.FindStringSubmatch(q); len(clipMatches) > 1 {
+			res, _ := strconv.Atoi(clipMatches[1])
+			return Quality{Resolution: res, FPS: 60, Original: q}
+		}
 		return Quality{Original: q}
 	}
 

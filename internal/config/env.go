@@ -36,11 +36,13 @@ type EnvConfig struct {
 	TwitchClientSecret string `env:"TWITCH_CLIENT_SECRET, required"`
 
 	// worker config
-	MaxChatDownloadExecutions         int `env:"MAX_CHAT_DOWNLOAD_EXECUTIONS, default=3"`
-	MaxChatRenderExecutions           int `env:"MAX_CHAT_RENDER_EXECUTIONS, default=2"`
-	MaxVideoDownloadExecutions        int `env:"MAX_VIDEO_DOWNLOAD_EXECUTIONS, default=2"`
-	MaxVideoConvertExecutions         int `env:"MAX_VIDEO_CONVERT_EXECUTIONS, default=3"`
-	MaxVideoSpriteThumbnailExecutions int `env:"MAX_VIDEO_SPRITE_THUMBNAIL_EXECUTIONS, default=2"`
+	MaxChatDownloadExecutions         int  `env:"MAX_CHAT_DOWNLOAD_EXECUTIONS, default=3"`
+	MaxChatRenderExecutions           int  `env:"MAX_CHAT_RENDER_EXECUTIONS, default=2"`
+	MaxVideoDownloadExecutions        int  `env:"MAX_VIDEO_DOWNLOAD_EXECUTIONS, default=2"`
+	MaxVideoConvertExecutions         int  `env:"MAX_VIDEO_CONVERT_EXECUTIONS, default=3"`
+	MaxVideoSpriteThumbnailExecutions int  `env:"MAX_VIDEO_SPRITE_THUMBNAIL_EXECUTIONS, default=2"`
+	DisableLiveArchiveStallCheck      bool `env:"DISABLE_LIVE_ARCHIVE_STALL_CHECK, default=false"`
+	LiveArchiveStallTimeoutSeconds    int  `env:"LIVE_ARCHIVE_STALL_TIMEOUT_SECONDS, default=180"`
 
 	// oauth OIDC
 	OAuthEnabled      bool   `env:"OAUTH_ENABLED, default=false"`
@@ -67,7 +69,7 @@ func processFileSecrets() {
 		if len(parts) != 2 {
 			continue
 		}
-		
+
 		envKeyFile := parts[0]
 		filePath := parts[1]
 
@@ -107,7 +109,7 @@ func processFileSecrets() {
 
 		targetKey := strings.TrimSuffix(envKeyFile, fileSuffix)
 		secretValue := strings.TrimSpace(string(content))
-		
+
 		if err := os.Setenv(targetKey, secretValue); err != nil {
 			log.Error().
 				Str("env_var", targetKey).
@@ -125,8 +127,8 @@ func processFileSecrets() {
 
 // GetEnvConfig returns the environment variables for the application
 func GetEnvConfig() EnvConfig {
-	processFileSecrets() 
-	
+	processFileSecrets()
+
 	ctx := context.Background()
 
 	var c EnvConfig
@@ -137,8 +139,8 @@ func GetEnvConfig() EnvConfig {
 }
 
 func GetEnvApplicationConfig() EnvApplicationConfig {
-	processFileSecrets() 
-	
+	processFileSecrets()
+
 	ctx := context.Background()
 
 	var c EnvApplicationConfig

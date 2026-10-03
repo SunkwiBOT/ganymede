@@ -22,6 +22,8 @@ func TestSelectClosestQuality(t *testing.T) {
 		{"best", []string{"chunked", "1080p60", "360p30", "480p30", "720p60", "audio_only"}, "chunked"},
 		{"audio_only", []string{"chunked", "1080p60", "360p30", "480p30", "720p60", "audio_only"}, "audio_only"},
 		{"500p", []string{"chunked", "1080p60", "360p30", "480p30", "720p60", "audio_only"}, "chunked"},
+		{"1080p", []string{"1080-0", "1080-1", "360-0", "720-0", "portrait-1134-0"}, "1080-0"},
+		{"720p", []string{"1080-0", "360-0", "720-0", "720-1", "portrait-1134-0"}, "720-0"},
 	}
 
 	for _, test := range tests {
@@ -55,6 +57,9 @@ func TestParseQuality(t *testing.T) {
 		{"", 0, 0, ""},
 		{"999p120", 999, 120, "999p120"},
 		{"240", 240, 60, "240"},
+		{"1080-0", 1080, 60, "1080-0"},
+		{"720-1", 720, 60, "720-1"},
+		{"portrait-1134-0", 0, 0, "portrait-1134-0"},
 	}
 
 	for _, tt := range tests {

@@ -58,6 +58,7 @@ export interface Video {
   created_at: Date;
   edges: VideoEdges;
   locked: boolean;
+  notes: string;
   caption_path: string;
   storage_size_bytes?: number;
 }
@@ -134,6 +135,7 @@ export interface CreateVodRequest {
   caption_path?: string;
   streamed_at: string;
   locked: boolean;
+  notes?: string;
 }
 
 export interface ChatHistogramData {
@@ -511,6 +513,36 @@ const useLockVideo = () => {
   });
 };
 
+const updateVideoNotes = async (
+  axiosPrivate: AxiosInstance,
+  videoId: string,
+  notes: string
+): Promise<ApiResponse<Video>> => {
+  const response = await axiosPrivate.put(`/api/v1/vod/${videoId}/notes`, {
+    notes,
+  });
+  return response.data;
+};
+
+const useUpdateVideoNotes = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ApiResponse<Video>,
+    Error,
+    {
+      axiosPrivate: AxiosInstance;
+      videoId: string;
+      notes: string;
+    }
+  >({
+    mutationFn: ({ axiosPrivate, videoId, notes }) =>
+      updateVideoNotes(axiosPrivate, videoId, notes),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["video", variables.videoId] });
+    },
+  });
+};
+
 const generateStaticThumbnail = async (
   axiosPrivate: AxiosInstance,
   videoId: string
@@ -651,6 +683,7 @@ export {
   useCreateVideo,
   useEditVideo,
   useLockVideo,
+  useUpdateVideoNotes,
   useGenerateStaticThumbnail,
   useSearchVideos,
   useGetVideoByExternalId,

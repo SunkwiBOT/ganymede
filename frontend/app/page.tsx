@@ -9,7 +9,7 @@ import { useTranslations } from "next-intl";
 import useSettingsStore from "./store/useSettingsStore";
 
 export default function Home() {
-  const { isLoggedIn } = useAuthStore();
+  const { isLoggedIn, hasHydrated } = useAuthStore();
   const hideContinueWatching = useSettingsStore((state) => state.hideContinueWatching);
 
   useEffect(() => {
@@ -20,13 +20,14 @@ export default function Home() {
 
   return (
     <div>
-      {!isLoggedIn && (
+      {/* Render neither variant until the auth state is known, otherwise the hero flashes for logged-in users */}
+      {hasHydrated && !isLoggedIn && (
         <Box mb={5}>
           <LandingHero />
         </Box>
       )}
 
-      {isLoggedIn && !hideContinueWatching && (
+      {hasHydrated && isLoggedIn && !hideContinueWatching && (
         <Box>
           <Center>
             <Title>{t('continueWatching')}</Title>

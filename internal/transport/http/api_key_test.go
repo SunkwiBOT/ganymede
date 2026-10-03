@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/gavv/httpexpect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	internalHttp "github.com/zibbp/ganymede/internal/transport/http"
+	"github.com/zibbp/ganymede/internal/utils"
 	"github.com/zibbp/ganymede/tests"
 )
 
@@ -396,6 +399,60 @@ func TestApiKeyHTTP(t *testing.T) {
 			Status(http.StatusOK)
 	})
 
+	t.Run("VideoNotesPreserveScopedAccessAndRequiredLogin", func(t *testing.T) {
+		t.Setenv("REQUIRE_LOGIN", "true")
+
+		channel := e.POST("/channel").WithJSON(internalHttp.CreateChannelRequest{
+			ExternalID:  "notes-test-channel",
+			Name:        "notes-test-channel",
+			DisplayName: "Notes test channel",
+			ImagePath:   "/tmp/notes-test-profile.png",
+		}).Expect().Status(http.StatusOK).JSON().Object()
+		initialNotes := "Kept for the interview at 00:10"
+		video := e.POST("/vod").WithJSON(internalHttp.CreateVodRequest{
+			ChannelID:        channel.Path("$.data.id").String().Raw(),
+			ExtID:            "notes-test-video",
+			Platform:         utils.PlatformTwitch,
+			Type:             utils.Archive,
+			Title:            "Notes test video",
+			Duration:         60,
+			WebThumbnailPath: "/tmp/notes-test-thumb.png",
+			VideoPath:        "/tmp/notes-test-video.mp4",
+			StreamedAt:       time.Now().UTC().Format(time.RFC3339),
+			Notes:            &initialNotes,
+		}).Expect().Status(http.StatusOK).JSON().Object()
+		videoID := video.Path("$.data.id").String().Raw()
+		video.Path("$.data.notes").IsEqual(initialNotes)
+		video.Value("data").Object().NotContainsKey("views").NotContainsKey("local_views")
+
+		mintKey := func(name, scope string) string {
+			return e.POST("/admin/api-keys").WithJSON(internalHttp.CreateApiKeyRequest{
+				Name: name, Scopes: []string{scope},
+			}).Expect().Status(http.StatusCreated).JSON().Object().Path("$.data.secret").String().Raw()
+		}
+		readerKey := mintKey("notes-reader", "vod:read")
+		writerKey := mintKey("notes-writer", "vod:write")
+		bare := bareHTTPClient(t)
+		path := "/vod/" + videoID + "/notes"
+		body := map[string]string{"notes": "Updated notes"}
+		bare.PUT(path).WithJSON(body).Expect().Status(http.StatusUnauthorized)
+		bare.PUT(path).WithHeader("Authorization", "Bearer "+readerKey).
+			WithJSON(body).Expect().Status(http.StatusForbidden)
+		bare.PUT(path).WithHeader("Authorization", "Bearer "+writerKey).
+			WithJSON(body).Expect().Status(http.StatusOK).JSON().Object().Path("$.data.notes").IsEqual("Updated notes")
+
+		bare.GET("/vod/external_id/notes-test-video").Expect().Status(http.StatusUnauthorized)
+		bare.GET("/vod/external_id/notes-test-video").WithHeader("Authorization", "Bearer "+readerKey).
+			Expect().Status(http.StatusOK).JSON().Object().Path("$.data.id").IsEqual(videoID)
+		bare.GET("/vod/"+videoID).WithHeader("Authorization", "Bearer "+readerKey).
+			Expect().Status(http.StatusOK).JSON().Object().Path("$.data.notes").IsEqual("Updated notes")
+
+		e.PUT(path).WithJSON(map[string]string{"notes": strings.Repeat("x", 10001)}).
+			Expect().Status(http.StatusBadRequest)
+		e.PUT(path).WithJSON(map[string]string{"notes": ""}).Expect().Status(http.StatusOK)
+		e.GET("/vod/" + videoID).Expect().Status(http.StatusOK).JSON().Object().Value("data").Object().NotContainsKey("notes")
+	})
+
 	t.Run("UpdateChangesScopesAndRevokesCachedAccess", func(t *testing.T) {
 		// Cache-flush proof requires a flexible-auth route (one whose
 		// middleware actually consults the bearer). GET /queue is the
@@ -424,7 +481,7 @@ func TestApiKeyHTTP(t *testing.T) {
 		// Update: rename + swap scopes for vod:read (drops queue
 		// access). If the cache held a stale entry with the old
 		// scopes, the next /queue hit would still pass.
-		updated := e.PUT("/admin/api-keys/"+id).
+		updated := e.PUT("/admin/api-keys/" + id).
 			WithJSON(internalHttp.UpdateApiKeyRequest{
 				Name:   "update-target-http-renamed",
 				Scopes: []string{"vod:read"},
@@ -450,7 +507,7 @@ func TestApiKeyHTTP(t *testing.T) {
 			Expect().Status(http.StatusCreated).JSON().Object()
 		id := obj.Path("$.data.api_key.id").String().Raw()
 
-		e.PUT("/admin/api-keys/"+id).
+		e.PUT("/admin/api-keys/" + id).
 			WithJSON(internalHttp.UpdateApiKeyRequest{
 				Name:   "update-bad-scope-http",
 				Scopes: []string{"bogus:read"},
@@ -493,7 +550,7 @@ func TestApiKeyHTTP(t *testing.T) {
 
 		e.DELETE("/admin/api-keys/" + id).Expect().Status(http.StatusOK)
 
-		e.PUT("/admin/api-keys/"+id).
+		e.PUT("/admin/api-keys/" + id).
 			WithJSON(internalHttp.UpdateApiKeyRequest{
 				Name:   "update-revoked-http",
 				Scopes: []string{"vod:read"},

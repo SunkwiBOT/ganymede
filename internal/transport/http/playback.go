@@ -76,7 +76,7 @@ func (h *Handler) UpdateProgress(c echo.Context) error {
 //	@Success		200	{object}	ent.Playback
 //	@Failure		400	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
-//	@Router			/playback/progress/{id} [get]
+//	@Router			/playback/{id} [get]
 //	@Security		ApiKeyCookieAuth
 func (h *Handler) GetProgress(c echo.Context) error {
 	user := userFromContext(c)
@@ -176,9 +176,26 @@ func (h *Handler) DeleteProgress(c echo.Context) error {
 	return SuccessResponse(c, "", "ok")
 }
 
+// GetLastPlaybacks godoc
+//
+//	@Summary		Get last playbacks
+//	@Description	Get last playback entries for the current user
+//	@Tags			Playback
+//	@Accept			json
+//	@Produce		json
+//	@Param			limit	query		integer	false	"Limit"	default(10)
+//	@Success		200		{object}	playback.GetPlaybackResp
+//	@Failure		400		{object}	utils.ErrorResponse
+//	@Failure		500		{object}	utils.ErrorResponse
+//	@Router			/playback/last [get]
+//	@Security		ApiKeyCookieAuth
 func (h *Handler) GetLastPlaybacks(c echo.Context) error {
 	user := userFromContext(c)
-	limit, err := strconv.Atoi(c.QueryParam("limit"))
+	limitParam := c.QueryParam("limit")
+	if limitParam == "" {
+		limitParam = "10"
+	}
+	limit, err := strconv.Atoi(limitParam)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "invalid limit")
 	}
