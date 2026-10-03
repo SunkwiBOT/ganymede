@@ -644,16 +644,6 @@ func validateRecoverableLiveVideoInput(video *ent.Vod) error {
 	return validateNonEmptyFile(video.TmpVideoDownloadPath, "live downloaded video input")
 }
 
-func recoverableLiveVideoInputPath(video *ent.Vod) string {
-	if video.VideoHlsPath != "" {
-		return fmt.Sprintf("%s/%s-video.m3u8", video.TmpVideoHlsPath, video.ExtID)
-	}
-	if video.TmpVideoConvertPath != "" && utils.FileExists(video.TmpVideoConvertPath) {
-		return video.TmpVideoConvertPath
-	}
-	return video.TmpVideoDownloadPath
-}
-
 func liveArchiveDownloadNeedsRecovery(queue *ent.Queue, kind string) bool {
 	switch kind {
 	case string(utils.TaskDownloadLiveVideo):

@@ -33,6 +33,16 @@ jobs:
           echo "Current repo: ${{ github.repository }}"
           echo "SKIP_SECRET_TESTS=true" >> $GITHUB_ENV
 
+      - name: Skip secret-dependent tests when Twitch credentials are unavailable
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+        run: |
+          if [ -z "$TWITCH_CLIENT_ID" ] || [ -z "$TWITCH_CLIENT_SECRET" ]; then
+            echo "Twitch credentials are unavailable; skipping secret-dependent tests."
+            echo "SKIP_SECRET_TESTS=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Build test docker image
         id: docker_build_test_image
         uses: docker/build-push-action@v7
@@ -51,12 +61,15 @@ jobs:
 
       # Instead of having to manually install all dependencies, build the docker container and run tests in there
       - name: Run tests
+        env:
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
         run: |
           docker run \
           -v /var/run/docker.sock:/var/run/docker.sock \
           -v /home/runner/work/${{ env.REPO_NAME }}/${{ env.REPO_NAME }}:/opt/app \
           -e SKIP_SECRET_TESTS=${{ env.SKIP_SECRET_TESTS }} \
-          -e TWITCH_CLIENT_ID=${{ secrets.TWITCH_CLIENT_ID }} \
-          -e TWITCH_CLIENT_SECRET=${{ secrets.TWITCH_CLIENT_SECRET }} \
+          -e TWITCH_CLIENT_ID \
+          -e TWITCH_CLIENT_SECRET \
           "${{ steps.docker_build_test_image.outputs.imageid }}" \
           bash -c "cd /opt/app && make test"
