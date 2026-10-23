@@ -35,8 +35,8 @@ const (
 	FieldClipVodOffset = "clip_vod_offset"
 	// FieldResolution holds the string denoting the resolution field in the database.
 	FieldResolution = "resolution"
-	// FieldProcessing holds the string denoting the processing field in the database.
-	FieldProcessing = "processing"
+	// FieldStatus holds the string denoting the status field in the database.
+	FieldStatus = "status"
 	// FieldThumbnailPath holds the string denoting the thumbnail_path field in the database.
 	FieldThumbnailPath = "thumbnail_path"
 	// FieldWebThumbnailPath holds the string denoting the web_thumbnail_path field in the database.
@@ -97,6 +97,8 @@ const (
 	FieldStorageSizeBytes = "storage_size_bytes"
 	// FieldStreamedAt holds the string denoting the streamed_at field in the database.
 	FieldStreamedAt = "streamed_at"
+	// FieldVideoStartAt holds the string denoting the video_start_at field in the database.
+	FieldVideoStartAt = "video_start_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -169,7 +171,7 @@ var Columns = []string{
 	FieldDuration,
 	FieldClipVodOffset,
 	FieldResolution,
-	FieldProcessing,
+	FieldStatus,
 	FieldThumbnailPath,
 	FieldWebThumbnailPath,
 	FieldVideoPath,
@@ -200,6 +202,7 @@ var Columns = []string{
 	FieldSpriteThumbnailsColumns,
 	FieldStorageSizeBytes,
 	FieldStreamedAt,
+	FieldVideoStartAt,
 	FieldUpdatedAt,
 	FieldCreatedAt,
 }
@@ -234,8 +237,6 @@ func ValidColumn(column string) bool {
 var (
 	// DefaultDuration holds the default value on creation for the "duration" field.
 	DefaultDuration int
-	// DefaultProcessing holds the default value on creation for the "processing" field.
-	DefaultProcessing bool
 	// DefaultLocked holds the default value on creation for the "locked" field.
 	DefaultLocked bool
 	// DefaultSpriteThumbnailsEnabled holds the default value on creation for the "sprite_thumbnails_enabled" field.
@@ -275,6 +276,18 @@ func TypeValidator(_type utils.VodType) error {
 		return nil
 	default:
 		return fmt.Errorf("vod: invalid enum value for type field: %q", _type)
+	}
+}
+
+const DefaultStatus utils.ArchiveStatus = "completed"
+
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(s utils.ArchiveStatus) error {
+	switch s {
+	case "queued", "running", "finalizing", "completed", "failed":
+		return nil
+	default:
+		return fmt.Errorf("vod: invalid enum value for status field: %q", s)
 	}
 }
 
@@ -331,9 +344,9 @@ func ByResolution(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldResolution, opts...).ToFunc()
 }
 
-// ByProcessing orders the results by the processing field.
-func ByProcessing(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldProcessing, opts...).ToFunc()
+// ByStatus orders the results by the status field.
+func ByStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
 // ByThumbnailPath orders the results by the thumbnail_path field.
@@ -479,6 +492,11 @@ func ByStorageSizeBytes(opts ...sql.OrderTermOption) OrderOption {
 // ByStreamedAt orders the results by the streamed_at field.
 func ByStreamedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStreamedAt, opts...).ToFunc()
+}
+
+// ByVideoStartAt orders the results by the video_start_at field.
+func ByVideoStartAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoStartAt, opts...).ToFunc()
 }
 
 // ByUpdatedAt orders the results by the updated_at field.

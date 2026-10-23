@@ -1,3 +1,4 @@
+import { ArchiveStatus, activeArchiveStatuses, isArchiveActive } from "@/app/util/archiveStatus";
 import { AxiosInstance } from "axios";
 import { ApiResponse } from "./useAxios";
 import {
@@ -7,15 +8,13 @@ import {
   UseQueryOptions,
 } from "@tanstack/react-query";
 import { NullResponse } from "./usePlayback";
-import { Video } from "./useVideos";
+import { Video, VideoType } from "./useVideos";
+import useRecordingStopStore from "@/app/store/useRecordingStopStore";
 
 export interface Queue {
   id: string;
   live_archive: boolean;
   on_hold: boolean;
-  video_processing: boolean;
-  chat_processing: boolean;
-  processing: boolean;
   task_vod_create_folder: QueueTaskStatus;
   task_vod_download_thumbnail: QueueTaskStatus;
   task_vod_save_info: QueueTaskStatus;
@@ -70,13 +69,13 @@ export enum QueueLogType {
 
 const getQueueItems = async (
   axiosPrivate: AxiosInstance,
-  processingOnly: boolean
+  unfinishedOnly: boolean
 ): Promise<Array<Queue>> => {
   const response = await axiosPrivate.get<ApiResponse<Array<Queue>>>(
     `/api/v1/queue`,
     {
       params: {
-        processing: processingOnly,
+        status: unfinishedOnly ? [...activeArchiveStatuses, ArchiveStatus.Failed].join(",") : undefined,
       },
     }
   );
@@ -85,11 +84,12 @@ const getQueueItems = async (
 
 const useGetQueueItems = (
   axiosPrivate: AxiosInstance,
-  processingOnly: boolean
+  unfinishedOnly: boolean
 ) => {
   return useQuery({
-    queryKey: ["queue", processingOnly],
-    queryFn: () => getQueueItems(axiosPrivate, processingOnly),
+    queryKey: ["queue", unfinishedOnly],
+    queryFn: () => getQueueItems(axiosPrivate, unfinishedOnly),
+    refetchInterval: (query) => query.state.data?.some(queue => isArchiveActive(queue.edges.vod.status)) ? 5000 : false,
   });
 };
 
@@ -136,6 +136,7 @@ const useGetQueueItem = (
   return useQuery({
     queryKey: ["queue", id],
     queryFn: () => getQueueItem(axiosPrivate, id),
+    refetchInterval: (query) => query.state.data && isArchiveActive(query.state.data.edges.vod.status) ? 5000 : false,
     ...options,
   });
 };
@@ -145,7 +146,38 @@ const useStopQueueItem = () => {
   return useMutation<NullResponse, Error, StopQueueItemVariables>({
     mutationFn: ({ axiosPrivate, id }) => stopQueueItem(axiosPrivate, id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["queue"] });
+      for (const key of ["queue", "video", "videos", "channel_videos", "playlist_videos", "search"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+};
+
+const useStopRecording = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    onMutate: ({ videoId }) => {
+      useRecordingStopStore.getState().requestStop(videoId);
+    },
+    onError: (_error, { videoId }) => {
+      useRecordingStopStore.getState().clearStop(videoId);
+    },
+    mutationFn: async ({ axiosPrivate, videoId }: { axiosPrivate: AxiosInstance; videoId: string }) => {
+      const response = await axiosPrivate.get<ApiResponse<Video>>(`/api/v1/vod/${videoId}`, {
+        params: { with_queue: true },
+      });
+      const video = response.data.data;
+      const queue = video.edges.queue;
+      if (video.type !== VideoType.Live || video.status !== ArchiveStatus.Running ||
+          !queue?.live_archive || queue.task_video_download !== QueueTaskStatus.Running) {
+        throw new Error("This video is no longer recording.");
+      }
+      await stopQueueItem(axiosPrivate, queue.id);
+    },
+    onSuccess: () => {
+      for (const key of ["queue", "video", "videos", "channel_videos", "playlist_videos", "search"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 };
@@ -155,12 +187,15 @@ const startQueueTask = async (
   queueId: string,
   taskName: QueueTask,
   continueWithSubsequent: boolean
-): Promise<NullResponse> => {
-  const response = await axiosPrivate.post(`/api/v1/queue/task/start`, {
-    queue_id: queueId,
-    task_name: taskName,
-    continue: continueWithSubsequent,
-  });
+): Promise<RestartQueueTaskResult> => {
+  const response = await axiosPrivate.post<ApiResponse<RestartQueueTaskResult>>(
+    `/api/v1/queue/task/start`,
+    {
+      queue_id: queueId,
+      task_name: taskName,
+      continue: continueWithSubsequent,
+    }
+  );
   return response.data.data;
 };
 
@@ -171,10 +206,24 @@ interface StartQueueTaskVariables {
   continueWithSubsequent: boolean;
 }
 
+export interface RestartQueueTaskResult {
+  job_id: number;
+  generation: number;
+  task_name: string;
+  older_active_cancelled: boolean;
+}
+
 const useStartQueueTask = () => {
-  return useMutation<NullResponse, Error, StartQueueTaskVariables>({
+  const queryClient = useQueryClient();
+  return useMutation<RestartQueueTaskResult, Error, StartQueueTaskVariables>({
     mutationFn: ({ axiosPrivate, queueId, taskName, continueWithSubsequent }) =>
       startQueueTask(axiosPrivate, queueId, taskName, continueWithSubsequent),
+    onSuccess: (result) => {
+      console.debug("Queue task restart scheduled", result);
+      for (const key of ["queue", "video", "videos", "channel_videos", "playlist_videos", "search"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
   });
 };
 
@@ -184,10 +233,7 @@ const editQueue = async (
 ): Promise<ApiResponse<NullResponse>> => {
   const response = await axiosPrivate.put(`/api/v1/queue/${queue.id}`, {
     id: queue.id,
-    processing: queue.processing,
     on_hold: queue.on_hold,
-    video_processing: queue.video_processing,
-    chat_processing: queue.chat_processing,
     live_archive: queue.live_archive,
     task_vod_create_folder: queue.task_vod_create_folder,
     task_vod_download_thumbnail: queue.task_vod_download_thumbnail,
@@ -213,7 +259,9 @@ const useEditQueue = () => {
   return useMutation<ApiResponse<NullResponse>, Error, EditQueueVariables>({
     mutationFn: ({ axiosPrivate, queue }) => editQueue(axiosPrivate, queue),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["queue"] });
+      for (const key of ["queue", "video", "videos", "channel_videos", "playlist_videos", "search"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 };
@@ -234,7 +282,9 @@ const useDeleteQueue = () => {
     mutationFn: ({ axiosPrivate, queueId }) =>
       deleteQueue(axiosPrivate, queueId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["queue"] });
+      for (const key of ["queue", "video", "videos", "channel_videos", "playlist_videos", "search"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
     },
   });
 };
@@ -270,6 +320,7 @@ const useGetQueueLogs = (
 export {
   useGetQueueItems,
   useStopQueueItem,
+  useStopRecording,
   useGetQueueItem,
   useStartQueueTask,
   useEditQueue,

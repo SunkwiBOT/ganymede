@@ -2,12 +2,12 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/riverqueue/river/rivertype"
 	"github.com/zibbp/ganymede/ent"
 	"github.com/zibbp/ganymede/internal/queue"
 	"github.com/zibbp/ganymede/internal/utils"
@@ -16,13 +16,13 @@ import (
 type QueueService interface {
 	CreateQueueItem(queueDto queue.Queue, vID uuid.UUID) (*ent.Queue, error)
 	GetQueueItems(c echo.Context) ([]*ent.Queue, error)
-	GetQueueItemsFilter(c echo.Context, pro bool) ([]*ent.Queue, error)
+	GetQueueItemsFilter(c echo.Context, statuses []utils.ArchiveStatus) ([]*ent.Queue, error)
 	GetQueueItem(id uuid.UUID) (*ent.Queue, error)
-	UpdateQueueItem(queueDto queue.Queue, id uuid.UUID) (*ent.Queue, error)
+	UpdateQueueItem(ctx context.Context, queueDto queue.Queue, id uuid.UUID) (*ent.Queue, error)
 	DeleteQueueItem(c echo.Context, id uuid.UUID) error
 	ReadLogFile(c echo.Context, id uuid.UUID, logType string) ([]byte, error)
 	StopQueueItem(ctx context.Context, id uuid.UUID) error
-	StartQueueTask(ctx context.Context, input queue.StartQueueTaskInput) (*rivertype.JobRow, error)
+	RestartQueueTask(ctx context.Context, input queue.StartQueueTaskInput) (*queue.RestartResult, error)
 }
 
 type CreateQueueRequest struct {
@@ -39,9 +39,6 @@ type UpdateQueueRequest struct {
 	ID                       uuid.UUID        `json:"id"`
 	LiveArchive              bool             `json:"live_archive"`
 	OnHold                   bool             `json:"on_hold"`
-	VideoProcessing          bool             `json:"video_processing"`
-	ChatProcessing           bool             `json:"chat_processing"`
-	Processing               bool             `json:"processing"`
 	TaskVodCreateFolder      utils.TaskStatus `json:"task_vod_create_folder" validate:"required,oneof=pending running success failed"`
 	TaskVodDownloadThumbnail utils.TaskStatus `json:"task_vod_download_thumbnail" validate:"required,oneof=pending running success failed"`
 	TaskVodSaveInfo          utils.TaskStatus `json:"task_vod_save_info" validate:"required,oneof=pending running success failed"`
@@ -66,7 +63,6 @@ type UpdateQueueRequest struct {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/queue [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) CreateQueueItem(c echo.Context) error {
 	cqt := new(CreateQueueRequest)
@@ -97,26 +93,23 @@ func (h *Handler) CreateQueueItem(c echo.Context) error {
 //	@Tags			queue
 //	@Accept			json
 //	@Produce		json
-//	@Param			processing	query		string	false	"Get processing queue items"
+//	@Param			status	query		string	false	"Comma-separated archive statuses: queued,running,finalizing,completed,failed"
 //	@Success		200			{object}	[]ent.Queue
 //	@Failure		400			{object}	utils.ErrorResponse
 //	@Failure		500			{object}	utils.ErrorResponse
 //	@Router			/queue [get]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) GetQueueItems(c echo.Context) error {
-	processing := false
-	processingParam := c.QueryParam("processing")
-	if processingParam == "true" {
-		processing = true
+	statuses, err := parseArchiveStatuses(c.QueryParam("status"))
+	if err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, err.Error())
 	}
-
-	if processing {
-		qFilter, err := h.Service.QueueService.GetQueueItemsFilter(c, processing)
+	if len(statuses) > 0 {
+		q, err := h.Service.QueueService.GetQueueItemsFilter(c, statuses)
 		if err != nil {
 			return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		}
-		return SuccessResponse(c, qFilter, "queue items")
+		return SuccessResponse(c, q, "queue items")
 	}
 
 	q, err := h.Service.QueueService.GetQueueItems(c)
@@ -138,7 +131,6 @@ func (h *Handler) GetQueueItems(c echo.Context) error {
 //	@Failure		400	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/queue/{id} [get]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) GetQueueItem(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
@@ -165,7 +157,6 @@ func (h *Handler) GetQueueItem(c echo.Context) error {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/queue/{id} [put]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) UpdateQueueItem(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
@@ -183,9 +174,6 @@ func (h *Handler) UpdateQueueItem(c echo.Context) error {
 	queueDto := queue.Queue{
 		LiveArchive:              uqr.LiveArchive,
 		OnHold:                   uqr.OnHold,
-		VideoProcessing:          uqr.VideoProcessing,
-		ChatProcessing:           uqr.ChatProcessing,
-		Processing:               uqr.Processing,
 		TaskVodCreateFolder:      uqr.TaskVodCreateFolder,
 		TaskVodDownloadThumbnail: uqr.TaskVodDownloadThumbnail,
 		TaskVodSaveInfo:          uqr.TaskVodSaveInfo,
@@ -198,7 +186,7 @@ func (h *Handler) UpdateQueueItem(c echo.Context) error {
 		TaskChatMove:             uqr.TaskChatMove,
 	}
 
-	que, err := h.Service.QueueService.UpdateQueueItem(queueDto, id)
+	que, err := h.Service.QueueService.UpdateQueueItem(c.Request().Context(), queueDto, id)
 	if err != nil {
 		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
@@ -217,7 +205,6 @@ func (h *Handler) UpdateQueueItem(c echo.Context) error {
 //	@Failure		400	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/queue/{id} [delete]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) DeleteQueueItem(c echo.Context) error {
 	id, err := uuid.Parse(c.Param("id"))
@@ -244,7 +231,6 @@ func (h *Handler) DeleteQueueItem(c echo.Context) error {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/queue/{id}/tail [get]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) ReadQueueLogFile(c echo.Context) error {
 	id := c.Param("id")
@@ -283,7 +269,6 @@ func (h *Handler) ReadQueueLogFile(c echo.Context) error {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/queue/{id}/stop [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) StopQueueItem(c echo.Context) error {
 	id := c.Param("id")
@@ -302,17 +287,18 @@ func (h *Handler) StopQueueItem(c echo.Context) error {
 
 // StartQueueTask godoc
 //
-//	@Summary		Start a queue task for a queue
-//	@Description	Start a specific queue task
+//	@Summary		Restart a queue task
+//	@Description	Atomically schedule a new generation of a queue task
 //	@Tags			queue
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		StartQueueTaskRequest	true	"Start queue task"
-//	@Success		200		{object}	string
+//	@Success		200		{object}	queue.RestartResult
 //	@Failure		400		{object}	utils.ErrorResponse
+//	@Failure		404		{object}	utils.ErrorResponse
+//	@Failure		409		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/queue/task/start [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) StartQueueTask(c echo.Context) error {
 	body := new(StartQueueTaskRequest)
@@ -323,15 +309,24 @@ func (h *Handler) StartQueueTask(c echo.Context) error {
 		return ErrorResponse(c, http.StatusBadRequest, err.Error())
 	}
 
-	_, err := h.Service.QueueService.StartQueueTask(c.Request().Context(), queue.StartQueueTaskInput{
+	result, err := h.Service.QueueService.RestartQueueTask(c.Request().Context(), queue.StartQueueTaskInput{
 		QueueId:  body.QueueId,
 		TaskName: body.TaskName,
 		Continue: body.Continue,
 	})
 
 	if err != nil {
+		if errors.Is(err, queue.ErrRestartInvalid) {
+			return ErrorResponse(c, http.StatusBadRequest, err.Error())
+		}
+		if errors.Is(err, queue.ErrRestartNotFound) {
+			return ErrorResponse(c, http.StatusNotFound, err.Error())
+		}
+		if errors.Is(err, queue.ErrRestartConflict) {
+			return ErrorResponse(c, http.StatusConflict, err.Error())
+		}
 		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
 
-	return SuccessResponse(c, "", fmt.Sprintf("started %s for %s", body.TaskName, body.QueueId))
+	return SuccessResponse(c, result, fmt.Sprintf("restarted %s for %s", body.TaskName, body.QueueId))
 }

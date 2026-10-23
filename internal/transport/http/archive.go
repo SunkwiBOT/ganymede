@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -72,7 +73,6 @@ func CheckIDType(id string) string {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/archive/channel [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) ArchiveChannel(c echo.Context) error {
 	body := new(ArchiveChannelRequest)
@@ -99,9 +99,9 @@ func (h *Handler) ArchiveChannel(c echo.Context) error {
 //	@Param			vod	body		ArchiveVideoRequest	true	"Vod"
 //	@Success		200	{object}	archive.TwitchVodResponse
 //	@Failure		400	{object}	utils.ErrorResponse
+//	@Failure		409	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/archive/video [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) ArchiveVideo(c echo.Context) error {
 	body := new(ArchiveVideoRequest)
@@ -136,6 +136,9 @@ func (h *Handler) ArchiveVideo(c echo.Context) error {
 			ArchiveChat: body.ArchiveChat,
 			RenderChat:  body.RenderChat,
 		})
+		if errors.Is(err, archive.ErrActiveLiveArchive) {
+			return ErrorResponse(c, http.StatusConflict, archive.ErrActiveLiveArchive.Error())
+		}
 		if err != nil {
 			return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 		}
@@ -186,7 +189,6 @@ func (h *Handler) ArchiveVideo(c echo.Context) error {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/archive/convert-twitch-live-chat [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) ConvertTwitchChat(c echo.Context) error {
 	body := new(ConvertTwitchChatRequest)
@@ -207,7 +209,7 @@ func (h *Handler) ConvertTwitchChat(c echo.Context) error {
 	envConfig := config.GetEnvConfig()
 	outPath := fmt.Sprintf("%s/%s-chat-convert.json", envConfig.TempDir, body.VideoID)
 
-	err = utils.ConvertTwitchLiveChatToTDLChat(body.LiveChatPath, outPath, body.ChannelName, body.VideoID, body.VideoExternalID, body.ChannelID, t, body.PreviousVideoID)
+	err = utils.ConvertTwitchLiveChatToTDLChat(body.LiveChatPath, outPath, body.ChannelName, body.VideoID, body.VideoExternalID, body.ChannelID, t, body.PreviousVideoID, 0)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 	}

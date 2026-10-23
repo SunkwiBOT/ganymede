@@ -195,7 +195,7 @@ func TestCheckReusesActiveLiveArchiveWithoutDuplicateStart(t *testing.T) {
 		SetTitle(stream.Title).
 		SetDuration(1).
 		SetResolution("best").
-		SetProcessing(true).
+		SetStatus(utils.ArchiveRunning).
 		SetWebThumbnailPath("/tmp/existingchannel-web-thumbnail.jpg").
 		SetVideoPath("/tmp/existingchannel-video.mp4").
 		SetStreamedAt(stream.StartedAt).
@@ -205,7 +205,6 @@ func TestCheckReusesActiveLiveArchiveWithoutDuplicateStart(t *testing.T) {
 	existingQueue, err := app.Database.Client.Queue.Create().
 		SetVodID(existingVod.ID).
 		SetLiveArchive(true).
-		SetProcessing(true).
 		SetTaskVideoDownload(utils.Running).
 		SetArchiveChat(false).
 		SetRenderChat(false).

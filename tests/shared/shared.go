@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,7 +83,7 @@ func WaitForArchiveCompletion(t *testing.T, app *server.Application, videoId uui
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for {
-		q, err := app.Database.Client.Queue.Query().Where(queue.HasVodWith(vod.ID(videoId))).Only(t.Context())
+		q, err := app.Database.Client.Queue.Query().Where(queue.HasVodWith(vod.ID(videoId))).WithVod().Only(t.Context())
 		if err != nil {
 			t.Fatalf("query archive queue: %v", err)
 		}
@@ -96,7 +98,7 @@ func WaitForArchiveCompletion(t *testing.T, app *server.Application, videoId uui
 			return riverJobBlocksArchiveCompletion(job, videoId, q.ID)
 		})
 
-		if !q.Processing && activeJob == nil {
+		if q.Edges.Vod.Status == utils.ArchiveCompleted && activeJob == nil {
 			return
 		}
 		if time.Now().After(deadline) {
@@ -183,12 +185,12 @@ func WaitForArchiveCompletionAfterCrash(t *testing.T, app *server.Application, v
 	deadline := time.Now().Add(timeout)
 	for {
 		q, err := app.Database.Client.Queue.Query().
-			Where(queue.HasVodWith(vod.ID(videoID))).
+			Where(queue.HasVodWith(vod.ID(videoID))).WithVod().
 			Only(t.Context())
 		if err != nil {
 			t.Fatalf("query crashed archive queue: %v", err)
 		}
-		if !q.Processing {
+		if q.Edges.Vod.Status == utils.ArchiveCompleted {
 			return q
 		}
 		if time.Now().After(deadline) {
@@ -225,7 +227,9 @@ func WaitForArchiveMetadataFinalization(t *testing.T, app *server.Application, v
 
 // WaitForRunningVideoDownload waits until the queue is running and the media
 // file is non-empty, proving that a worker crash occurs during real capture
-// rather than before the external downloader starts.
+// rather than before the external downloader starts. HLS playlists grow slowly
+// (one small entry per ~10s segment), so for .m3u8 paths it also waits for
+// media references (#EXTINF or segment files) instead of relying on byte size.
 func WaitForRunningVideoDownload(t *testing.T, app *server.Application, queueID uuid.UUID, mediaPath string, minimumBytes int64, timeout time.Duration) int64 {
 	t.Helper()
 
@@ -237,7 +241,9 @@ func WaitForRunningVideoDownload(t *testing.T, app *server.Application, queueID 
 		}
 		if q.TaskVideoDownload == utils.Running {
 			if info, err := os.Stat(mediaPath); err == nil && info.Size() >= minimumBytes {
-				return info.Size()
+				if !isHLSPlaylistPath(mediaPath) || hlsPlaylistHasMedia(mediaPath) {
+					return info.Size()
+				}
 			}
 		}
 		if time.Now().After(deadline) {
@@ -245,6 +251,32 @@ func WaitForRunningVideoDownload(t *testing.T, app *server.Application, queueID 
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func isHLSPlaylistPath(mediaPath string) bool {
+	return strings.HasSuffix(mediaPath, ".m3u8")
+}
+
+// hlsPlaylistHasMedia reports whether an HLS capture has produced real media,
+// either via playlist entries or segment files on disk. A header-only playlist
+// must not count as capture progress.
+func hlsPlaylistHasMedia(playlistPath string) bool {
+	if byts, err := os.ReadFile(playlistPath); err == nil && strings.Contains(string(byts), "#EXTINF") {
+		return true
+	}
+	dir := filepath.Dir(playlistPath)
+	for _, pattern := range []string{"*_segment*.m4s", "*_segment*.ts"} {
+		matches, err := filepath.Glob(filepath.Join(dir, pattern))
+		if err != nil {
+			continue
+		}
+		for _, match := range matches {
+			if info, err := os.Stat(match); err == nil && info.Size() > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // FindArchiveJob returns the River job of the requested kind and state that

@@ -2,6 +2,17 @@ basePath: /api/v1
 definitions:
   admin.GetStorageDistributionResponse:
     properties:
+      largest_videos:
+        description: Top largest videos by storage size
+        items:
+          $ref: '#/definitions/admin.LargestVideoItem'
+        type: array
+      storage_by_type:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: Map of video types to total storage used in bytes
+        type: object
       storage_distribution:
         additionalProperties:
           format: int64
@@ -17,11 +28,18 @@ definitions:
       memory_total:
         description: Total memory in bytes
         type: integer
+      queue:
+        $ref: '#/definitions/admin.QueueOverview'
+      user_count:
+        type: integer
       videos_directory_free_space:
         description: Free space in bytes
         type: integer
+      videos_directory_total_space:
+        description: Filesystem capacity in bytes
+        type: integer
       videos_directory_used_space:
-        description: Used space in bytes
+        description: Tracked VOD storage in bytes
         type: integer
     type: object
   admin.GetVideoStatisticsResponse:
@@ -32,6 +50,10 @@ definitions:
         additionalProperties:
           type: integer
         type: object
+      total_duration_seconds:
+        type: integer
+      total_storage_bytes:
+        type: integer
       video_count:
         type: integer
       video_types:
@@ -52,12 +74,40 @@ definitions:
       uptime:
         type: string
     type: object
+  admin.LargestVideoItem:
+    properties:
+      channel_name:
+        type: string
+      duration:
+        type: integer
+      id:
+        type: string
+      storage_size_bytes:
+        type: integer
+      streamed_at:
+        type: string
+      title:
+        type: string
+    type: object
   admin.ProgramVersions:
     properties:
       ffmpeg:
         type: string
       twitch_downloader:
         type: string
+    type: object
+  admin.QueueOverview:
+    properties:
+      failed:
+        type: integer
+      live_archiving:
+        type: integer
+      on_hold:
+        type: integer
+      processing:
+        type: integer
+      total:
+        type: integer
     type: object
   archive.TwitchVodResponse:
     properties:
@@ -274,10 +324,6 @@ definitions:
             items:
               type: string
             type: array
-          watch_while_archiving:
-            description: Allow watching live streams while archiving them by downloading
-              a temporary HLS stream.
-            type: boolean
         type: object
       log_retention_days:
         description: Number of days to retain log files.
@@ -822,9 +868,6 @@ definitions:
       archive_chat:
         description: ArchiveChat holds the value of the "archive_chat" field.
         type: boolean
-      chat_processing:
-        description: ChatProcessing holds the value of the "chat_processing" field.
-        type: boolean
       chat_start:
         description: ChatStart holds the value of the "chat_start" field.
         type: string
@@ -845,9 +888,6 @@ definitions:
         type: boolean
       on_hold:
         description: OnHold holds the value of the "on_hold" field.
-        type: boolean
-      processing:
-        description: Processing holds the value of the "processing" field.
         type: boolean
       render_chat:
         description: RenderChat holds the value of the "render_chat" field.
@@ -900,9 +940,6 @@ definitions:
       updated_at:
         description: UpdatedAt holds the value of the "updated_at" field.
         type: string
-      video_processing:
-        description: VideoProcessing holds the value of the "video_processing" field.
-        type: boolean
       workflow_id:
         description: WorkflowID holds the value of the "workflow_id" field.
         type: string
@@ -1031,9 +1068,6 @@ definitions:
         allOf:
         - $ref: '#/definitions/utils.VideoPlatform'
         description: The platform the VOD is from, takes an enum.
-      processing:
-        description: Whether the VOD is currently processing.
-        type: boolean
       resolution:
         description: Resolution holds the value of the "resolution" field.
         type: string
@@ -1067,6 +1101,10 @@ definitions:
         description: SpriteThumbnailsWidth holds the value of the "sprite_thumbnails_width"
           field.
         type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/utils.ArchiveStatus'
+        description: Archive processing lifecycle, independent of capture completeness.
       storage_size_bytes:
         description: The size of the VOD in bytes.
         type: integer
@@ -1112,6 +1150,11 @@ definitions:
         type: string
       video_path:
         description: VideoPath holds the value of the "video_path" field.
+        type: string
+      video_start_at:
+        description: The wall-clock time that video second 0 corresponds to; for live
+          archives it accounts for capture latency and may equal the chat capture
+          start when unresolvable.
         type: string
       web_thumbnail_path:
         description: WebThumbnailPath holds the value of the "web_thumbnail_path"
@@ -1406,10 +1449,17 @@ definitions:
         enum:
         - twitch
         - youtube
-      processing:
-        type: boolean
       resolution:
         type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/utils.ArchiveStatus'
+        enum:
+        - queued
+        - running
+        - finalizing
+        - completed
+        - failed
       streamed_at:
         type: string
       thumbnail_path:
@@ -1436,6 +1486,7 @@ definitions:
     - channel_id
     - duration
     - platform
+    - status
     - streamed_at
     - title
     - type
@@ -1752,15 +1803,11 @@ definitions:
     type: object
   http.UpdateQueueRequest:
     properties:
-      chat_processing:
-        type: boolean
       id:
         type: string
       live_archive:
         type: boolean
       on_hold:
-        type: boolean
-      processing:
         type: boolean
       task_chat_convert:
         allOf:
@@ -1842,8 +1889,6 @@ definitions:
         - running
         - success
         - failed
-      video_processing:
-        type: boolean
     required:
     - task_chat_convert
     - task_chat_download
@@ -1959,6 +2004,166 @@ definitions:
         type: boolean
     required:
     - resolution
+    type: object
+  http.VideoDetails:
+    properties:
+      caption_path:
+        description: CaptionPath holds the value of the "caption_path" field.
+        type: string
+      chat_path:
+        description: ChatPath holds the value of the "chat_path" field.
+        type: string
+      chat_video_path:
+        description: ChatVideoPath holds the value of the "chat_video_path" field.
+        type: string
+      clip_ext_vod_id:
+        description: The external VOD ID of a clip. This is only populated if the
+          clip is linked to a video.
+        type: string
+      clip_vod_offset:
+        description: The offset in seconds to where the clip starts in the VOD. This
+          is only populdated if the video is a clip.
+        type: integer
+      created_at:
+        description: CreatedAt holds the value of the "created_at" field.
+        type: string
+      duration:
+        description: Duration holds the value of the "duration" field.
+        type: integer
+      edges:
+        allOf:
+        - $ref: '#/definitions/ent.VodEdges'
+        description: |-
+          Edges holds the relations/edges for other nodes in the graph.
+          The values are being populated by the VodQuery when eager-loading is set.
+      ext_id:
+        description: The ID of the video on the external platform.
+        type: string
+      ext_stream_id:
+        description: The ID of the stream on the external platform, if applicable.
+        type: string
+      file_name:
+        description: FileName holds the value of the "file_name" field.
+        type: string
+      folder_name:
+        description: FolderName holds the value of the "folder_name" field.
+        type: string
+      id:
+        description: ID of the ent.
+        type: string
+      info_path:
+        description: InfoPath holds the value of the "info_path" field.
+        type: string
+      live_chat_convert_path:
+        description: Path to the converted live chat file
+        type: string
+      live_chat_path:
+        description: Path to the raw live chat file
+        type: string
+      live_preview_available:
+        type: boolean
+      locked:
+        description: Locked holds the value of the "locked" field.
+        type: boolean
+      notes:
+        description: User notes about why the VOD was kept.
+        type: string
+      platform:
+        allOf:
+        - $ref: '#/definitions/utils.VideoPlatform'
+        description: The platform the VOD is from, takes an enum.
+      resolution:
+        description: Resolution holds the value of the "resolution" field.
+        type: string
+      sprite_thumbnails_columns:
+        description: SpriteThumbnailsColumns holds the value of the "sprite_thumbnails_columns"
+          field.
+        type: integer
+      sprite_thumbnails_enabled:
+        description: SpriteThumbnailsEnabled holds the value of the "sprite_thumbnails_enabled"
+          field.
+        type: boolean
+      sprite_thumbnails_height:
+        description: SpriteThumbnailsHeight holds the value of the "sprite_thumbnails_height"
+          field.
+        type: integer
+      sprite_thumbnails_images:
+        description: SpriteThumbnailsImages holds the value of the "sprite_thumbnails_images"
+          field.
+        items:
+          type: string
+        type: array
+      sprite_thumbnails_interval:
+        description: SpriteThumbnailsInterval holds the value of the "sprite_thumbnails_interval"
+          field.
+        type: integer
+      sprite_thumbnails_rows:
+        description: SpriteThumbnailsRows holds the value of the "sprite_thumbnails_rows"
+          field.
+        type: integer
+      sprite_thumbnails_width:
+        description: SpriteThumbnailsWidth holds the value of the "sprite_thumbnails_width"
+          field.
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/utils.ArchiveStatus'
+        description: Archive processing lifecycle, independent of capture completeness.
+      storage_size_bytes:
+        description: The size of the VOD in bytes.
+        type: integer
+      streamed_at:
+        description: The time the VOD was streamed.
+        type: string
+      thumbnail_path:
+        description: ThumbnailPath holds the value of the "thumbnail_path" field.
+        type: string
+      title:
+        description: Title holds the value of the "title" field.
+        type: string
+      tmp_chat_download_path:
+        description: The path where the chat is downloaded to
+        type: string
+      tmp_chat_render_path:
+        description: The path where the rendered chat is
+        type: string
+      tmp_live_chat_convert_path:
+        description: The path where the converted chat is
+        type: string
+      tmp_live_chat_download_path:
+        description: The path where the converted chat is
+        type: string
+      tmp_video_convert_path:
+        description: The path where the converted video is
+        type: string
+      tmp_video_download_path:
+        description: The path where the video is downloaded to
+        type: string
+      tmp_video_hls_path:
+        description: The path where the temporary video hls files are
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/utils.VodType'
+        description: The type of VOD, takes an enum.
+      updated_at:
+        description: UpdatedAt holds the value of the "updated_at" field.
+        type: string
+      video_hls_path:
+        description: The path where the video hls files are
+        type: string
+      video_path:
+        description: VideoPath holds the value of the "video_path" field.
+        type: string
+      video_start_at:
+        description: The wall-clock time that video second 0 corresponds to; for live
+          archives it accounts for capture latency and may equal the chat capture
+          start when unresolvable.
+        type: string
+      web_thumbnail_path:
+        description: WebThumbnailPath holds the value of the "web_thumbnail_path"
+          field.
+        type: string
     type: object
   http.apiKeyDTO:
     properties:
@@ -2134,6 +2339,31 @@ definitions:
     - DefaultOperator
     - OperatorAND
     - OperatorOR
+  queue.RestartResult:
+    properties:
+      generation:
+        type: integer
+      job_id:
+        type: integer
+      older_active_cancelled:
+        type: boolean
+      task_name:
+        type: string
+    type: object
+  utils.ArchiveStatus:
+    enum:
+    - queued
+    - running
+    - finalizing
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - ArchiveQueued
+    - ArchiveRunning
+    - ArchiveFinalizing
+    - ArchiveCompleted
+    - ArchiveFailed
   utils.ErrorResponse:
     properties:
       message:
@@ -2264,12 +2494,14 @@ definitions:
       total_count:
         type: integer
     type: object
-host: localhost:4000
 info:
   contact: {}
   description: |-
-    Authentication is handled using JWT tokens. The tokens are set as access-token and refresh-token cookies.
-    For information regarding which role is authorized for which endpoint, see the http handler https://github.com/Zibbp/ganymede/blob/main/internal/transport/http/handler.go.
+    Ganymede authenticates programmatic API clients with scoped API keys. Send the complete key in the Authorization header as a Bearer token when API-key authentication is enabled.
+    API keys are created by an administrator in the web UI and the complete key is shown only once. Keys use resource:tier scopes such as vod:read, vod:write, and *:admin.
+    For interactive browser use, sign in through the web UI or POST /auth/login. This establishes an HTTP-only session cookie that the browser sends automatically with same-origin requests, including requests from this Swagger UI.
+    Browser sessions use the admin > editor > archiver > user role hierarchy. They are not external API credentials and are therefore not entered in the Swagger Authorize dialog.
+    Operations marked ApiKeyAuth accept API keys. Browser-only operations, including API-key management and per-user playback state, require an interactive session and do not accept API keys.
   title: Ganymede API
   version: "1.0"
 paths:
@@ -2277,7 +2509,8 @@ paths:
     get:
       description: Returns API keys, newest first. By default only active (non-revoked)
         keys are returned; pass ?include_revoked=true for a full audit listing. Secrets
-        are never returned by this endpoint.
+        are never returned by this endpoint. Requires an interactive administrator
+        browser session; API keys are not accepted.
       parameters:
       - description: include revoked keys
         in: query
@@ -2296,8 +2529,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: List API keys
       tags:
       - admin
@@ -2305,7 +2536,8 @@ paths:
       consumes:
       - application/json
       description: Mints a new admin-managed API key. The full secret is returned
-        in the response and is the only time it is visible — store it securely.
+        in the response and is the only time it is visible — store it securely. Requires
+        an interactive administrator browser session; API keys are not accepted.
       parameters:
       - description: create api key payload
         in: body
@@ -2328,15 +2560,14 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Create an API key
       tags:
       - admin
   /admin/api-keys/{id}:
     delete:
       description: Soft-deletes an API key by setting revoked_at. The verification
-        cache is flushed so the key stops authenticating immediately.
+        cache is flushed so the key stops authenticating immediately. Requires an
+        interactive administrator browser session; API keys are not accepted.
       parameters:
       - description: api key id
         in: path
@@ -2358,8 +2589,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Revoke an API key
       tags:
       - admin
@@ -2368,7 +2597,8 @@ paths:
       - application/json
       description: Replaces an existing API key's editable fields (name, description,
         scopes). Prefix and secret are immutable — rotating a key still means revoke
-        + create.
+        + create. Requires an interactive administrator browser session; API keys
+        are not accepted.
       parameters:
       - description: api key id
         in: path
@@ -2400,8 +2630,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Update an API key
       tags:
       - admin
@@ -2422,7 +2650,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get ganymede info
       tags:
@@ -2444,7 +2671,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get storage distribution
       tags:
@@ -2466,7 +2692,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get system overview
       tags:
@@ -2488,7 +2713,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get Ganymede video statistics
       tags:
@@ -2522,7 +2746,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Archive a twitch channel
       tags:
@@ -2555,7 +2778,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Convert twitch live chat file
       tags:
@@ -2583,12 +2805,15 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Archive a twitch vod
       tags:
@@ -2597,7 +2822,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Change password
+      description: Change the password for the user associated with the current interactive
+        browser session. API keys are not accepted.
       parameters:
       - description: Change password
         in: body
@@ -2624,8 +2850,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Change password
       tags:
       - auth
@@ -2633,8 +2857,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Login a user (sets access-token and refresh-token cookies). Access
-        token lasts for 1 hour. Refresh token lasts for 1 month.
+      description: Login with a username and password and establish an HTTP-only session
+        cookie. The session has a 30-day maximum lifetime and expires after 7 days
+        of inactivity.
       parameters:
       - description: Login
         in: body
@@ -2668,7 +2893,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Logout a user (destroys session)
+      description: Destroy the current interactive browser session. API keys are not
+        accepted.
       produces:
       - application/json
       responses:
@@ -2680,8 +2906,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Logout a user
       tags:
       - auth
@@ -2689,7 +2913,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get current user
+      description: Get the user associated with the current interactive browser session.
+        API keys are not accepted.
       produces:
       - application/json
       responses:
@@ -2709,31 +2934,29 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Get current user
       tags:
       - auth
   /auth/oauth/callback:
     get:
-      consumes:
-      - application/json
-      description: OAuth callback for OAuth provider
-      produces:
-      - application/json
+      description: Complete the OAuth login flow, establish an HTTP-only session cookie,
+        and redirect to the frontend.
+      parameters:
+      - description: OAuth authorization code
+        in: query
+        name: code
+        required: true
+        type: string
+      - description: OAuth state
+        in: query
+        name: state
+        required: true
+        type: string
       responses:
-        "200":
-          description: OK
+        "302":
+          description: Found
           schema:
             type: string
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -2743,22 +2966,15 @@ paths:
       - auth
   /auth/oauth/login:
     get:
-      consumes:
-      - application/json
-      description: Login a user with OAuth (sets access-token and refresh-token cookies)
-      produces:
-      - application/json
+      description: Start the OAuth login flow. A successful callback establishes an
+        HTTP-only session cookie.
       responses:
-        "200":
-          description: OK
+        "307":
+          description: Temporary Redirect
           schema:
-            $ref: '#/definitions/ent.User'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/utils.ErrorResponse'
-        "401":
-          description: Unauthorized
+            type: string
+        "403":
+          description: Forbidden
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
         "500":
@@ -2850,7 +3066,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Unblock a video
       tags:
@@ -2909,7 +3124,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Block a video
       tags:
@@ -2987,7 +3201,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Create a channel
       tags:
@@ -3021,7 +3234,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete a channel
       tags:
@@ -3094,7 +3306,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update a channel
       tags:
@@ -3126,7 +3337,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update channel image
       tags:
@@ -3207,7 +3417,7 @@ paths:
         required: true
         type: string
       produces:
-      - text/plain
+      - text/vtt
       responses:
         "200":
           description: OK
@@ -3241,7 +3451,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get config
       tags:
@@ -3273,7 +3482,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update config
       tags:
@@ -3297,7 +3505,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get all watched channels
       tags:
@@ -3329,7 +3536,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Add watched channel
       tags:
@@ -3361,7 +3567,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete watched channel
       tags:
@@ -3398,7 +3603,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update watched channel
       tags:
@@ -3420,7 +3624,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Manually check for live streams
       tags:
@@ -3472,7 +3675,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get all notification configurations
       tags:
@@ -3504,7 +3706,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Create a notification configuration
       tags:
@@ -3538,7 +3739,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete a notification configuration
       tags:
@@ -3573,7 +3773,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get a single notification configuration
       tags:
@@ -3614,7 +3813,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update a notification configuration
       tags:
@@ -3654,7 +3852,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Test a notification configuration
       tags:
@@ -3663,7 +3860,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get all playback progress
+      description: Get all playback progress for the current user. Requires an interactive
+        browser session; API keys are not accepted.
       produces:
       - application/json
       responses:
@@ -3677,8 +3875,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Get all progress
       tags:
       - Playback
@@ -3686,7 +3882,8 @@ paths:
     delete:
       consumes:
       - application/json
-      description: Delete playback progress
+      description: Delete playback progress for the current user. Requires an interactive
+        browser session; API keys are not accepted.
       parameters:
       - description: vod id
         in: path
@@ -3708,15 +3905,14 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Delete progress
       tags:
       - Playback
     get:
       consumes:
       - application/json
-      description: Get playback progress
+      description: Get playback progress for the current user. Requires an interactive
+        browser session; API keys are not accepted.
       parameters:
       - description: vod id
         in: path
@@ -3738,8 +3934,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Get progress
       tags:
       - Playback
@@ -3747,7 +3941,8 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get last playback entries for the current user
+      description: Get the latest playback entries for the current user. Requires
+        an interactive browser session; API keys are not accepted.
       parameters:
       - default: 10
         description: Limit
@@ -3769,8 +3964,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Get last playbacks
       tags:
       - Playback
@@ -3778,7 +3971,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Update playback progress
+      description: Update playback progress for the current user. Requires an interactive
+        browser session; API keys are not accepted.
       parameters:
       - description: progress
         in: body
@@ -3801,8 +3995,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Update progress
       tags:
       - Playback
@@ -3810,7 +4002,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Update playback status
+      description: Update playback status for the current user. Requires an interactive
+        browser session; API keys are not accepted.
       parameters:
       - description: status
         in: body
@@ -3833,8 +4026,6 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
-      security:
-      - ApiKeyCookieAuth: []
       summary: Update status
       tags:
       - Playback
@@ -3886,7 +4077,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Create playlist
       tags:
@@ -3918,7 +4108,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete playlist
       tags:
@@ -3987,7 +4176,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Add vod to playlist
       tags:
@@ -4024,7 +4212,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update playlist
       tags:
@@ -4062,7 +4249,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Set delay of vod in playlist for multistream
       tags:
@@ -4096,7 +4282,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get playlist rules
       tags:
@@ -4134,7 +4319,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Set playlist rules
       tags:
@@ -4171,7 +4355,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Test playlist rules
       tags:
@@ -4209,7 +4392,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete vod from playlist
       tags:
@@ -4220,9 +4402,9 @@ paths:
       - application/json
       description: Get queue items
       parameters:
-      - description: Get processing queue items
+      - description: 'Comma-separated archive statuses: queued,running,finalizing,completed,failed'
         in: query
-        name: processing
+        name: status
         type: string
       produces:
       - application/json
@@ -4242,7 +4424,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get queue items
       tags:
@@ -4274,7 +4455,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Create a queue item
       tags:
@@ -4304,7 +4484,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete queue item
       tags:
@@ -4335,7 +4514,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get queue item
       tags:
@@ -4372,7 +4550,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update queue item
       tags:
@@ -4405,7 +4582,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Stop a queue item
       tags:
@@ -4442,7 +4618,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Read queue log file
       tags:
@@ -4451,7 +4626,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: Start a specific queue task
+      description: Atomically schedule a new generation of a queue task
       parameters:
       - description: Start queue task
         in: body
@@ -4465,9 +4640,17 @@ paths:
         "200":
           description: OK
           schema:
-            type: string
+            $ref: '#/definitions/queue.RestartResult'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
         "500":
@@ -4475,9 +4658,8 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
-      summary: Start a queue task for a queue
+      summary: Restart a queue task
       tags:
       - queue
   /task/start:
@@ -4502,7 +4684,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Start a task
       tags:
@@ -4588,7 +4769,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get all users
       tags:
@@ -4618,7 +4798,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete user
       tags:
@@ -4649,7 +4828,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get user by id
       tags:
@@ -4686,7 +4864,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update user
       tags:
@@ -4748,7 +4925,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Create a vod
       tags:
@@ -4786,7 +4962,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Delete a vod
       tags:
@@ -4823,7 +4998,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/ent.Vod'
+            $ref: '#/definitions/http.VideoDetails'
         "400":
           description: Bad Request
           schema:
@@ -4875,7 +5050,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update a vod
       tags:
@@ -5200,7 +5374,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Get ffprobe data for video
       tags:
@@ -5232,7 +5405,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Generate sprite thumbnails for a vod
       tags:
@@ -5264,7 +5436,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Generate static thumbnail for a vod
       tags:
@@ -5300,7 +5471,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Lock or unlock a vod
       tags:
@@ -5342,7 +5512,6 @@ paths:
           schema:
             $ref: '#/definitions/utils.ErrorResponse'
       security:
-      - ApiKeyCookieAuth: []
       - ApiKeyAuth: []
       summary: Update vod notes
       tags:
@@ -5396,7 +5565,7 @@ paths:
         required: true
         type: string
       produces:
-      - text/plain
+      - text/vtt
       responses:
         "200":
           description: OK
@@ -5446,7 +5615,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/ent.Vod'
+            $ref: '#/definitions/http.VideoDetails'
         "400":
           description: Bad Request
           schema:
@@ -5490,10 +5659,10 @@ paths:
         in: query
         name: playlist_id
         type: string
-      - description: Processing. Set to false to exclude videos that are still processing.
+      - description: 'Comma-separated archive statuses: queued,running,finalizing,completed,failed'
         in: query
-        name: processing
-        type: boolean
+        name: status
+        type: string
       produces:
       - application/json
       responses:
@@ -5522,6 +5691,11 @@ paths:
         in: query
         name: q
         required: true
+        type: string
+      - description: 'Comma-separated search fields: title, notes, id, ext_id, chapter,
+          channel_name, channel_id, channel_ext_id (defaults to title)'
+        in: query
+        name: fields
         type: string
       - default: 10
         description: Limit
@@ -5553,16 +5727,11 @@ paths:
       summary: Search vods
       tags:
       - vods
-schemes:
-- https
 securityDefinitions:
   ApiKeyAuth:
-    description: 'Authorization: Bearer <api_key>. Mint a key via the admin UI.'
+    description: Programmatic API authentication. Enter `Bearer gym_{prefix}_{secret}`.
+      Create keys in the admin UI; the complete key is shown only once.
     in: header
     name: Authorization
-    type: apiKey
-  ApiKeyCookieAuth:
-    in: cookie
-    name: access-token
     type: apiKey
 swagger: "2.0"

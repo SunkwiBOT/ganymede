@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,8 +18,10 @@ import (
 	"github.com/rs/zerolog/log"
 	"github.com/zibbp/ganymede/ent"
 	entQueue "github.com/zibbp/ganymede/ent/queue"
+	entVod "github.com/zibbp/ganymede/ent/vod"
 	"github.com/zibbp/ganymede/internal/database"
 	"github.com/zibbp/ganymede/internal/exec"
+	"github.com/zibbp/ganymede/internal/hls"
 	"github.com/zibbp/ganymede/internal/utils"
 )
 
@@ -220,14 +226,14 @@ func archiveQueueStageNeedsRecovery(ctx context.Context, store *database.Databas
 		}
 		return false, err
 	}
-	return archiveQueueStageStatusNeedsRecovery(queue, kind), nil
+	v, err := queue.QueryVod().Only(ctx)
+	if err != nil {
+		return false, err
+	}
+	return v.Status.Active() && archiveQueueStageStatusNeedsRecovery(queue, kind), nil
 }
 
 func archiveQueueStageStatusNeedsRecovery(queue *ent.Queue, kind string) bool {
-	if !queue.Processing {
-		return false
-	}
-
 	var status utils.TaskStatus
 	switch utils.GetTaskName(kind) {
 	case utils.TaskCreateFolder:
@@ -298,7 +304,10 @@ func recoverExhaustedArchiveJob(ctx context.Context, store *database.Database, r
 		if taskName == "" {
 			return nil
 		}
-		return setQueueStatus(ctx, store.Client, QueueStatusInput{Status: utils.Failed, QueueId: queueID, Task: taskName})
+		if err := setQueueStatus(ctx, store.Client, QueueStatusInput{Status: utils.Failed, QueueId: queueID, Task: taskName}); err != nil {
+			return err
+		}
+		return checkIfTasksAreDone(ctx, store.Client, ArchiveVideoInput{QueueId: queueID})
 	}
 }
 
@@ -393,7 +402,7 @@ func recoverOrphanedLiveVideoArchives(ctx context.Context, store *database.Datab
 	stuckQueues, err := store.Client.Queue.Query().
 		Where(
 			entQueue.LiveArchive(true),
-			entQueue.Processing(true),
+			entQueue.HasVodWith(entVod.StatusIn(utils.ActiveArchiveStatuses()...)),
 			entQueue.Or(
 				entQueue.TaskVideoDownloadEQ(utils.Running),
 				entQueue.And(
@@ -439,7 +448,7 @@ func cleanupEmptyFailedLiveArchives(ctx context.Context, store *database.Databas
 	candidates, err := store.Client.Queue.Query().
 		Where(
 			entQueue.LiveArchive(true),
-			entQueue.Processing(true),
+			entQueue.HasVodWith(entVod.StatusNEQ(utils.ArchiveCompleted)),
 			entQueue.Or(
 				entQueue.TaskVideoDownloadEQ(utils.Failed),
 				entQueue.TaskVideoConvertEQ(utils.Failed),
@@ -487,7 +496,7 @@ func recoverOrphanedLiveChatArchives(ctx context.Context, store *database.Databa
 	stuckQueues, err := store.Client.Queue.Query().
 		Where(
 			entQueue.LiveArchive(true),
-			entQueue.Processing(true),
+			entQueue.HasVodWith(entVod.StatusIn(utils.ActiveArchiveStatuses()...)),
 			entQueue.ArchiveChat(true),
 			entQueue.TaskChatDownloadEQ(utils.Running),
 		).
@@ -629,19 +638,145 @@ func recoverInterruptedLiveVideoArchive(ctx context.Context, store *database.Dat
 }
 
 func validateRecoverableLiveVideoInput(video *ent.Vod) error {
-	if video.VideoHlsPath != "" {
-		return validateNonEmptyFile(
-			fmt.Sprintf("%s/%s-video.m3u8", video.TmpVideoHlsPath, video.ExtID),
-			"live HLS playlist",
-		)
+	path := recoverableLiveVideoInputPath(video)
+
+	// HLS needs media: a playlist with resolvable segments or segments on
+	// disk for rebuild.
+	if err := validateLiveHlsPlaylistReferences(path); err == nil {
+		return nil
 	}
-	if video.TmpVideoConvertPath != "" && utils.FileExists(video.TmpVideoConvertPath) {
-		if nonEmptyFileExists(video.TmpVideoConvertPath) || nonEmptyFileExists(video.TmpVideoDownloadPath) {
-			return nil
+	if hls.HasRecoverableSegments(video.TmpVideoHlsPath, liveCaptureID(video)) {
+		return nil
+	}
+	return fmt.Errorf("live HLS recovery playlist has no media segments: %s", path)
+}
+
+// validateLiveHlsPlaylistReferences accepts a media playlist only when every
+// referenced init and media file resolves next to the playlist and is
+// non-empty.
+func validateLiveHlsPlaylistReferences(path string) error {
+	if err := validateNonEmptyFile(path, "live video recovery input"); err != nil {
+		return err
+	}
+	byts, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("read live HLS recovery playlist %s: %w", path, err)
+	}
+	if !strings.Contains(string(byts), "#EXTINF") {
+		return fmt.Errorf("live HLS recovery playlist has no media segments: %s", path)
+	}
+
+	dir := filepath.Dir(path)
+	var initRefs []string
+	var segmentRefs []string
+	expectSegment := false
+	for _, raw := range strings.Split(string(byts), "\n") {
+		line := strings.TrimSpace(strings.TrimSuffix(raw, "\r"))
+		if line == "" {
+			continue
 		}
-		return validateNonEmptyFile(video.TmpVideoConvertPath, "live converted video input")
+		if strings.HasPrefix(line, "#EXT-X-MAP:") {
+			if uri := extractHlsURIAttribute(line); uri != "" {
+				initRefs = append(initRefs, uri)
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "#EXTINF") {
+			expectSegment = true
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if expectSegment {
+			segmentRefs = append(segmentRefs, line)
+			expectSegment = false
+		}
 	}
-	return validateNonEmptyFile(video.TmpVideoDownloadPath, "live downloaded video input")
+	if len(segmentRefs) == 0 {
+		return fmt.Errorf("live HLS recovery playlist has no media segments: %s", path)
+	}
+
+	for _, ref := range initRefs {
+		resolved, err := resolveHlsPlaylistReference(dir, ref)
+		if err != nil {
+			return err
+		}
+		if err := validateNonEmptyFile(resolved, "live video recovery init"); err != nil {
+			return err
+		}
+	}
+	for _, ref := range segmentRefs {
+		resolved, err := resolveHlsPlaylistReference(dir, ref)
+		if err != nil {
+			return err
+		}
+		if err := validateNonEmptyFile(resolved, "live video recovery segment"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func extractHlsURIAttribute(line string) string {
+	idx := strings.Index(line, "URI=")
+	if idx < 0 {
+		return ""
+	}
+	rest := strings.TrimSpace(line[idx+len("URI="):])
+	if rest == "" {
+		return ""
+	}
+	if rest[0] == '"' || rest[0] == '\'' {
+		end := strings.IndexByte(rest[1:], rest[0])
+		if end < 0 {
+			return ""
+		}
+		return rest[1 : 1+end]
+	}
+	if end := strings.IndexAny(rest, ", \r\n"); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
+func resolveHlsPlaylistReference(dir, ref string) (string, error) {
+	ref = strings.TrimSpace(strings.Trim(ref, "\"'"))
+	if ref == "" {
+		return "", fmt.Errorf("empty HLS playlist reference")
+	}
+	if strings.Contains(ref, "://") {
+		if !strings.HasPrefix(strings.ToLower(ref), "file://") {
+			return "", fmt.Errorf("remote HLS playlist reference: %s", ref)
+		}
+		ref = strings.TrimPrefix(strings.TrimPrefix(ref, "file://"), "localhost")
+	}
+	if i := strings.Index(ref, "?"); i >= 0 {
+		ref = ref[:i]
+	}
+	if i := strings.Index(ref, "#"); i >= 0 {
+		ref = ref[:i]
+	}
+	if unescaped, err := url.PathUnescape(ref); err == nil {
+		ref = unescaped
+	}
+	if filepath.IsAbs(ref) {
+		return filepath.Clean(ref), nil
+	}
+	return filepath.Join(dir, ref), nil
+}
+
+func recoverableLiveVideoInputPath(video *ent.Vod) string {
+	// Live captures always store HLS; the playlist is the source of truth and
+	// can be rebuilt from segments on disk when truncated.
+	if video.VideoHlsPath != "" {
+		return liveHlsPlaylistPath(video)
+	}
+	playlistPath := liveHlsPlaylistPath(video)
+	if utils.FileExists(playlistPath) {
+		return playlistPath
+	}
+	return video.TmpVideoDownloadPath
 }
 
 func liveArchiveDownloadNeedsRecovery(queue *ent.Queue, kind string) bool {

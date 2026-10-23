@@ -36,7 +36,7 @@ type VodService interface {
 	UpdateVod(c echo.Context, vID uuid.UUID, vod vod.Vod, cID uuid.UUID) (*ent.Vod, error)
 	SearchVods(ctx context.Context, limit int, offset int, types []utils.VodType, predicates []predicate.Vod, sortBy utils.VideoSort, order utils.SortOrder) (vod.Pagination, error)
 	GetVodPlaylists(c echo.Context, vID uuid.UUID) ([]*ent.Playlist, error)
-	GetVodsPagination(c echo.Context, limit int, offset int, channelId uuid.UUID, types []utils.VodType, playlistId uuid.UUID, processing bool, sortBy utils.VideoSort, sortOrder utils.SortOrder) (vod.Pagination, error)
+	GetVodsPagination(c echo.Context, limit int, offset int, channelId uuid.UUID, types []utils.VodType, playlistId uuid.UUID, statuses []utils.ArchiveStatus, sortBy utils.VideoSort, sortOrder utils.SortOrder) (vod.Pagination, error)
 	GetVodChatComments(c echo.Context, vodID uuid.UUID, start float64, end float64) (*[]chat.Comment, error)
 	GetVodChatCommentsFromChatter(c echo.Context, vodID uuid.UUID, chatterID string) (*[]chat.Comment, error)
 	GetUserIdFromChat(c echo.Context, vodID uuid.UUID) (*int64, error)
@@ -60,7 +60,7 @@ type CreateVodRequest struct {
 	Title            string              `json:"title" validate:"required,min=1"`
 	Duration         int                 `json:"duration" validate:"required"`
 	Resolution       string              `json:"resolution"`
-	Processing       bool                `json:"processing"`
+	Status           utils.ArchiveStatus `json:"status" validate:"required,oneof=queued running finalizing completed failed"`
 	ThumbnailPath    string              `json:"thumbnail_path"`
 	WebThumbnailPath string              `json:"web_thumbnail_path" validate:"required,min=1"`
 	VideoPath        string              `json:"video_path" validate:"required,min=1"`
@@ -77,7 +77,7 @@ type SearchQueryParams struct {
 	Q      string          `query:"q" validate:"required"`
 	Limit  int             `query:"limit" default:"10" validate:"number"`
 	Offset int             `query:"offset" default:"0" validate:"number"`
-	Fields []string        `validate:"dive,oneof=title id ext_id chapter channel_name channel_id channel_ext_id"`
+	Fields []string        `validate:"dive,oneof=title notes id ext_id chapter channel_name channel_id channel_ext_id"`
 	SortBy utils.VideoSort `query:"sort_by" default:"date" validate:"oneof=date created"`
 	Order  utils.SortOrder `query:"order" default:"desc" validate:"oneof=asc desc"`
 }
@@ -94,7 +94,6 @@ type SearchQueryParams struct {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		409		{object}	utils.ErrorResponse
 //	@Router			/vod [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) CreateVod(c echo.Context) error {
 	var req CreateVodRequest
@@ -136,7 +135,7 @@ func (h *Handler) CreateVod(c echo.Context) error {
 		Title:            req.Title,
 		Duration:         req.Duration,
 		Resolution:       req.Resolution,
-		Processing:       req.Processing,
+		Status:           req.Status,
 		ThumbnailPath:    req.ThumbnailPath,
 		WebThumbnailPath: req.WebThumbnailPath,
 		VideoPath:        req.VideoPath,
@@ -188,6 +187,12 @@ func (h *Handler) GetVods(c echo.Context) error {
 	return SuccessResponse(c, v, "videos")
 }
 
+// VideoDetails includes the current availability of the temporary live preview.
+type VideoDetails struct {
+	*ent.Vod
+	LivePreviewAvailable bool `json:"live_preview_available"`
+}
+
 // GetVod godoc
 //
 //	@Summary		Get a vod
@@ -200,7 +205,7 @@ func (h *Handler) GetVods(c echo.Context) error {
 //	@Param			with_chapters		query		boolean	false	"With chapters"
 //	@Param			with_muted_segments	query		boolean	false	"With muted segments"
 //	@Param			with_queue			query		boolean	false	"With queue"
-//	@Success		200					{object}	ent.Vod
+//	@Success		200					{object}	VideoDetails
 //	@Failure		400					{object}	utils.ErrorResponse
 //	@Failure		404					{object}	utils.ErrorResponse
 //	@Failure		500					{object}	utils.ErrorResponse
@@ -265,7 +270,7 @@ func (h *Handler) GetVod(c echo.Context) error {
 		}
 		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
-	return SuccessResponse(c, v, "video")
+	return SuccessResponse(c, VideoDetails{Vod: v, LivePreviewAvailable: vod.LivePreviewAvailable(v)}, "video")
 }
 
 // GetVodByExternalId godoc
@@ -280,7 +285,7 @@ func (h *Handler) GetVod(c echo.Context) error {
 //	@Param			with_chapters		query		boolean	false	"With chapters"
 //	@Param			with_muted_segments	query		boolean	false	"With muted segments"
 //	@Param			with_queue			query		boolean	false	"With queue"
-//	@Success		200					{object}	ent.Vod
+//	@Success		200					{object}	VideoDetails
 //	@Failure		400					{object}	utils.ErrorResponse
 //	@Failure		404					{object}	utils.ErrorResponse
 //	@Failure		500					{object}	utils.ErrorResponse
@@ -303,7 +308,6 @@ func (h *Handler) GetVodByExternalId(c echo.Context) error {
 //	@Failure		404	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/vod/{id} [delete]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) DeleteVod(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -340,7 +344,6 @@ func (h *Handler) DeleteVod(c echo.Context) error {
 //	@Failure		404		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/vod/{id} [put]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) UpdateVod(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -370,7 +373,7 @@ func (h *Handler) UpdateVod(c echo.Context) error {
 		Title:            req.Title,
 		Duration:         req.Duration,
 		Resolution:       req.Resolution,
-		Processing:       req.Processing,
+		Status:           req.Status,
 		ThumbnailPath:    req.ThumbnailPath,
 		WebThumbnailPath: req.WebThumbnailPath,
 		VideoPath:        req.VideoPath,
@@ -401,6 +404,7 @@ func (h *Handler) UpdateVod(c echo.Context) error {
 //	@Accept			json
 //	@Produce		json
 //	@Param			q		query		string	true	"Search query"
+//	@Param			fields	query		string	false	"Comma-separated search fields: title, notes, id, ext_id, chapter, channel_name, channel_id, channel_ext_id (defaults to title)"
 //	@Param			limit	query		integer	false	"Limit"		default(10)
 //	@Param			offset	query		integer	false	"Offset"	default(0)
 //	@Success		200		{array}		ent.Vod
@@ -463,6 +467,8 @@ func (h *Handler) SearchVods(c echo.Context) error {
 		switch field {
 		case "title":
 			predicates = append(predicates, entVod.TitleContainsFold(qp.Q))
+		case "notes":
+			predicates = append(predicates, entVod.NotesContainsFold(qp.Q))
 		case "id":
 			if id, err := uuid.Parse(qp.Q); err == nil {
 				predicates = append(predicates, entVod.IDEQ(id))
@@ -536,7 +542,7 @@ func (h *Handler) GetVodPlaylists(c echo.Context) error {
 //		@Param			channel_id	query		string	false	"Channel ID"
 //	 @Param			types		query		string	false	"Types"
 //		@Param			playlist_id	query		string	false	"Playlist ID"
-//		@Param			processing	query		boolean	false	"Processing. Set to false to exclude videos that are still processing."
+//		@Param			status	query		string	false	"Comma-separated archive statuses: queued,running,finalizing,completed,failed"
 //		@Success		200			{object}	vod.Pagination
 //		@Failure		400			{object}	utils.ErrorResponse
 //		@Failure		500			{object}	utils.ErrorResponse
@@ -599,10 +605,12 @@ func (h *Handler) GetVodsPagination(c echo.Context) error {
 		sortOrder = utils.SortOrderDesc
 	}
 
-	// Default to true to include all videos. Only exclude processing videos is requested.
-	isProcessing := c.QueryParam("processing") != "false"
+	statuses, err := parseArchiveStatuses(c.QueryParam("status"))
+	if err != nil {
+		return ErrorResponse(c, http.StatusBadRequest, err.Error())
+	}
 
-	v, err := h.Service.VodService.GetVodsPagination(c, limit, offset, cUUID, types, playlistUUID, isProcessing, sortBy, sortOrder)
+	v, err := h.Service.VodService.GetVodsPagination(c, limit, offset, cUUID, types, playlistUUID, statuses, sortBy, sortOrder)
 	if err != nil {
 		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
@@ -812,7 +820,6 @@ func (h *Handler) GetNumberOfVodChatCommentsFromTime(c echo.Context) error {
 //	@Failure		400		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/vod/{id}/lock [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) LockVod(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -849,7 +856,6 @@ type UpdateVodNotesRequest struct {
 //	@Failure		404		{object}	utils.ErrorResponse
 //	@Failure		500		{object}	utils.ErrorResponse
 //	@Router			/vod/{id}/notes [put]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) UpdateVodNotes(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -885,7 +891,6 @@ func (h *Handler) UpdateVodNotes(c echo.Context) error {
 //	@Failure		400	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/vod/{id}/generate-static-thumbnail [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) GenerateStaticThumbnail(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -931,7 +936,7 @@ func (h *Handler) GetVodClips(c echo.Context) error {
 //	@Description	Get a WebVTT file describing sprite thumbnails for a vod
 //	@Tags			vods
 //	@Accept			json
-//	@Produce		text/plain
+//	@Produce		text/vtt
 //	@Param			id	path		string	true	"Vod ID"
 //	@Success		200	{object}	string
 //	@Failure		400	{object}	utils.ErrorResponse
@@ -971,7 +976,9 @@ func (h *Handler) GetVodSpriteThumbnails(c echo.Context) error {
 		return ErrorResponse(c, http.StatusInternalServerError, err.Error())
 	}
 
-	return c.String(http.StatusOK, webvtt)
+	// Native <track> elements require the WebVTT MIME type; text/plain
+	// risks browsers rejecting the cues.
+	return c.Blob(http.StatusOK, "text/vtt", []byte(webvtt))
 }
 
 // GetFFprobe godoc
@@ -987,7 +994,6 @@ func (h *Handler) GetVodSpriteThumbnails(c echo.Context) error {
 //	@Failure		404	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/vod/{id}/ffprobe [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) GetFFprobe(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))
@@ -1095,7 +1101,6 @@ func formatTimestamp(seconds int) string {
 //	@Failure		400	{object}	utils.ErrorResponse
 //	@Failure		500	{object}	utils.ErrorResponse
 //	@Router			/vod/{id}/generate-sprite-thumbnails [post]
-//	@Security		ApiKeyCookieAuth
 //	@Security		ApiKeyAuth
 func (h *Handler) GenerateSpriteThumbnails(c echo.Context) error {
 	vID, err := uuid.Parse(c.Param("id"))

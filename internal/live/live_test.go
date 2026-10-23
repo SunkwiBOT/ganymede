@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	osExec "os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -171,26 +172,23 @@ func assertVodAndQueue(t *testing.T, app *server.Application, liveChannel platfo
 	assert.Equal(t, vod.FolderName, expectedFolderName, "Folder name should match the expected storage template")
 	assert.Equal(t, vod.FileName, expectedFileName, "File name should match the expected storage template")
 
-	t.Logf("Waiting for live stream to archive")
-	time.Sleep(60 * time.Second)
-
-	// If watch while archiving is enabled, check that the hls playlist exists
-	if config.Get().Livestream.WatchWhileArchiving {
-		hlsPlaylistPath := fmt.Sprintf("%s/%s-video.m3u8", vod.TmpVideoHlsPath, vod.ExtID)
-		assert.FileExists(t, hlsPlaylistPath, "HLS playlist file should exist for watch while archiving")
-	}
-
 	if stopArchive {
+		t.Logf("Waiting for live stream to archive")
+		time.Sleep(60 * time.Second)
+
+		assert.FileExists(t, vod.TmpVideoDownloadPath, "Live HLS playlist should exist while archiving")
+
 		assert.NoError(t, app.QueueService.StopQueueItem(t.Context(), q.ID), "Failed to stop live archive")
-		tests_shared.WaitForArchiveCompletion(t, app, vod.ID, TestArchiveTimeout)
 	}
+	tests_shared.WaitForArchiveCompletion(t, app, vod.ID, TestArchiveTimeout)
 
 	q, err = app.Database.Client.Queue.Get(t.Context(), q.ID)
 	assert.NoError(t, err)
 	assert.NotNil(t, q)
 	assert.Equal(t, true, q.LiveArchive)
-	assert.Equal(t, false, q.ChatProcessing)
-	assert.Equal(t, false, q.VideoProcessing)
+	finalVideo, err := q.QueryVod().Only(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, utils.ArchiveCompleted, finalVideo.Status)
 	assert.Equal(t, utils.Success, q.TaskChatDownload)
 	assert.Equal(t, utils.Success, q.TaskChatRender)
 	assert.Equal(t, utils.Success, q.TaskChatMove)
@@ -206,6 +204,19 @@ func assertVodAndQueue(t *testing.T, app *server.Application, liveChannel platfo
 	assert.NotEqual(t, 0, vod.StorageSizeBytes)
 	assert.True(t, tests_shared.IsPlayableVideo(vod.VideoPath), "Video file is not playable")
 	assert.True(t, tests_shared.IsPlayableVideo(vod.ChatVideoPath), "Video file is not playable")
+
+	// Live captures HLS temp but saves a single format in video_path:
+	// MP4 by default, HLS playlist when save_as_hls is set.
+	vod, err = app.Database.Client.Vod.Query().Where(entVod.ExtStreamID(liveChannel.ID)).WithChannel().WithChapters().Only(t.Context())
+	assert.NoError(t, err)
+	if config.Get().Archive.SaveAsHls {
+		assert.NotEmpty(t, vod.VideoHlsPath, "Live HLS archive should have an HLS path")
+	} else {
+		assert.Empty(t, vod.VideoHlsPath, "Live MP4 archive should not have an HLS path")
+		assert.Equal(t, ".mp4", filepath.Ext(vod.VideoPath), "Live MP4 archive should save video_path as MP4")
+	}
+	assert.FileExists(t, vod.VideoPath)
+	assert.True(t, tests_shared.IsPlayableVideo(vod.VideoPath), "Saved live video is not playable")
 
 	// Assert at least one chapter exists
 	assert.NotEmpty(t, vod.Edges.Chapters, "Expected at least one chapter to be present")
@@ -290,8 +301,9 @@ func assertAudioOnlyVodAndQueue(t *testing.T, app *server.Application, liveChann
 	assert.Equal(t, true, q.LiveArchive)
 	assert.Equal(t, false, q.ArchiveChat)
 	assert.Equal(t, false, q.RenderChat)
-	assert.Equal(t, false, q.ChatProcessing)
-	assert.Equal(t, false, q.VideoProcessing)
+	finalVideo, err := q.QueryVod().Only(t.Context())
+	assert.NoError(t, err)
+	assert.Equal(t, utils.ArchiveCompleted, finalVideo.Status)
 	assert.Equal(t, utils.Success, q.TaskChatDownload)
 	assert.Equal(t, utils.Success, q.TaskChatConvert)
 	assert.Equal(t, utils.Success, q.TaskChatRender)
@@ -440,8 +452,8 @@ func TestTwitchWatchedChannelLiveFFmpegKilledStillFinalizes(t *testing.T) {
 
 // TestTwitchLiveArchiveRecoversAfterWorkerCrash verifies the complete
 // watchdog path after SIGKILL: the live capture child exits with its worker,
-// the partial transport stream is finalized, and the resulting archive is
-// playable.
+// the partial HLS capture is finalized, an MP4 is exported, and the resulting
+// archive is playable.
 func TestTwitchLiveArchiveRecoversAfterWorkerCrash(t *testing.T) {
 	app, err := tests.SetupWithoutWorker(t)
 	require.NoError(t, err)
@@ -488,7 +500,7 @@ func TestTwitchLiveArchiveRecoversAfterWorkerCrash(t *testing.T) {
 		app,
 		q.ID,
 		v.TmpVideoDownloadPath,
-		256*1024,
+		1,
 		90*time.Second,
 	)
 	originalJob := tests_shared.FindArchiveJob(
@@ -545,9 +557,7 @@ func TestTwitchLiveArchiveRecoversAfterWorkerCrash(t *testing.T) {
 	v = tests_shared.WaitForArchiveMetadataFinalization(t, app, v.ID, 30*time.Second)
 
 	require.True(t, q.LiveArchive)
-	require.False(t, q.Processing)
-	require.False(t, q.VideoProcessing)
-	require.False(t, q.ChatProcessing)
+	require.Equal(t, utils.ArchiveCompleted, v.Status)
 	require.Equal(t, utils.Success, q.TaskVideoDownload)
 	require.Equal(t, utils.Success, q.TaskVideoConvert)
 	require.Equal(t, utils.Success, q.TaskVideoMove)
@@ -565,32 +575,6 @@ func TestTwitchLiveArchiveRecoversAfterWorkerCrash(t *testing.T) {
 // StartCrashableWorker. During an ordinary package test it returns immediately.
 func TestWorkerCrashHelper(t *testing.T) {
 	tests.RunWorkerCrashHelper(t)
-}
-
-// TestTwitchWatchedChannelLiveWithWatchLive tests the basic live archiving of a Twitch channel with the watch live feature
-func TestTwitchWatchedChannelLiveWithWatchLive(t *testing.T) {
-	app, liveChannel, channel := setupAppAndLiveChannel(t)
-
-	updatedConfig := config.Get()
-	updatedConfig.Livestream.WatchWhileArchiving = true
-	assert.NoError(t, config.UpdateConfig(updatedConfig))
-
-	liveInput := live.Live{
-		ID:                    channel.ID,
-		WatchLive:             true,
-		WatchVod:              false,
-		DownloadArchives:      false,
-		DownloadHighlights:    false,
-		DownloadUploads:       false,
-		ArchiveChat:           true,
-		Resolution:            "best",
-		RenderChat:            true,
-		DownloadSubOnly:       false,
-		UpdateMetadataMinutes: 1,
-	}
-	watchedChannel := createWatchedChannel(t, app, liveInput, channel.ID, nil, nil)
-	startAndWaitForArchiving(t, app, watchedChannel.ID, false)
-	assertVodAndQueue(t, app, liveChannel, true)
 }
 
 // TestTwitchWatchedChannelLiveCategoryRestrictionFail tests live archiving with category restrictions that prevent archiving

@@ -1,8 +1,10 @@
 "use client"
+import { ArchiveStatus, isArchiveActive } from "@/app/util/archiveStatus";
 import { Platform, useFetchVideo, useGetVideoClips, VideoType } from "@/app/hooks/useVideos";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import classes from "./VideoPage.module.css"
 import { Box, Container, useComputedColorScheme, useMantineTheme } from "@mantine/core";
+import RecordingNotice from "@/app/components/videos/RecordingNotice";
 import VideoPlayer from "@/app/components/videos/Player";
 import VideoTitleBar from "@/app/components/videos/TitleBar";
 import ChatPlayer from "@/app/components/videos/ChatPlayer";
@@ -15,7 +17,6 @@ import useAuthStore from "@/app/store/useAuthStore";
 import VideoPageClips from "@/app/components/videos/VideoClips";
 import VideoChatHistogram from "@/app/components/videos/ChatHistogram";
 import VideoNotes from "@/app/components/videos/VideoNotes";
-import { MediaPlayerInstance } from "@vidstack/react";
 import { useTranslations } from "next-intl";
 
 interface Params {
@@ -53,11 +54,18 @@ const TwitchLiveChat = ({ channelName }: { channelName: string }) => {
   );
 };
 
+type NotesDraft = {
+  videoId: string;
+  value: string;
+};
+
 const VideoPage = ({ params }: { params: Promise<Params> }) => {
   const theme = useMantineTheme()
   const { id } = React.use(params);
   const { isLoggedIn } = useAuthStore()
-  const player = useRef<MediaPlayerInstance>(null);
+  const player = useRef<HTMLVideoElement>(null);
+  const [notesPanelOpen, setNotesPanelOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState<NotesDraft | null>(null);
   const isMobile = useMediaQuery(`(max-width: ${theme.breakpoints.sm})`);
 
   const t = useTranslations("VideoPage");
@@ -74,6 +82,13 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
   // need to fetch clips here to dynamically render the clips section
   const { data: videoClips, isPending: videoClipsPending, isError: videoClipsError } = useGetVideoClips(id, !loginRequired)
 
+  const openNotesPanel = useCallback(() => {
+    setNotesPanelOpen(true);
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }, []);
+
   useEffect(() => {
     document.title = `${data?.title}`;
   }, [data?.title]);
@@ -89,14 +104,21 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
     return <div>{t('error')}</div>
   }
 
-  const showArchivedChat = Boolean(data.chat_path && !data.processing);
+  const showArchivedChat = Boolean(data.chat_path && data.status === ArchiveStatus.Completed);
   const showTwitchLiveChat = Boolean(
-    data.processing &&
+    isArchiveActive(data.status) &&
     data.type === VideoType.Live &&
     data.platform === Platform.Twitch &&
     data.edges.channel.name
   );
   const showChat = !hideChat && (showArchivedChat || showTwitchLiveChat);
+
+  const currentNotesDraft = notesDraft?.videoId === data.id
+    ? notesDraft.value
+    : (data.notes ?? "");
+  const handleNotesDraftChange = (value: string) => {
+    setNotesDraft({ videoId: data.id, value });
+  };
 
   return (
     <div>
@@ -112,19 +134,34 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
         <div className={
           isMobile
             ? undefined
-            : (!showChat ? classes.leftColumnNoChat : classes.leftColumn)
+            : (!showChat && !notesPanelOpen ? classes.leftColumnNoChat : classes.leftColumn)
         }>
           <div className={
             isMobile
               ? undefined
               : (videoTheaterMode || fullscreen ? classes.videoPlayerTheaterMode : classes.videoPlayer)
           }>
-            <VideoPlayer key={data.id} video={data} ref={player} />
+            {isArchiveActive(data.status) && !data.live_preview_available ? (
+              <RecordingNotice video={data} />
+            ) : (
+              <VideoPlayer key={data.id} video={data} ref={player} />
+            )}
           </div>
         </div>
 
         {/* Chat */}
-        {showChat && (
+        {!isMobile && notesPanelOpen ? (
+          <div className={classes.rightColumn}>
+            <VideoNotes
+              video={data}
+              playerRef={player}
+              draft={currentNotesDraft}
+              onDraftChange={handleNotesDraftChange}
+              docked
+              onClose={() => setNotesPanelOpen(false)}
+            />
+          </div>
+        ) : showChat && (
           <div
             className={isMobile ? classes.chatColumnMobile : classes.rightColumn}
             style={isMobile ? undefined : { height: "auto", maxHeight: "auto" }}
@@ -148,10 +185,15 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
       </Box>
 
       {/* Title bar */}
-      {!videoTheaterMode && <VideoTitleBar video={data} />}
+      {!videoTheaterMode && (
+        <VideoTitleBar
+          video={data}
+          onEditNotes={!isMobile ? openNotesPanel : undefined}
+        />
+      )}
 
       {/* Desktop-only sections render after the player/chat block so toggling them doesn't shift player position */}
-      {!isMobile && !data.processing && (
+      {!isMobile && data.status === ArchiveStatus.Completed && (
         <Container size="7xl" fluid={true} >
           {videoClipsError && (
             <div>Error loading clips</div>
@@ -162,7 +204,7 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
         </Container>
       )}
 
-      {(!isMobile && data.chat_path && (data.type != VideoType.Clip) && showChatHistogram && !data.processing) && (
+      {(!isMobile && data.chat_path && (data.type != VideoType.Clip) && showChatHistogram && data.status === ArchiveStatus.Completed) && (
         <Container size="7xl" fluid={true} >
           <VideoChatHistogram videoId={data.id} playerRef={player} />
         </Container>
@@ -170,7 +212,13 @@ const VideoPage = ({ params }: { params: Promise<Params> }) => {
 
       {/* Notes live under the player (below chat histogram) and render on all layouts */}
       <Container size="7xl" fluid={true} >
-        <VideoNotes video={data} playerRef={player} />
+        <VideoNotes
+          video={data}
+          playerRef={player}
+          draft={currentNotesDraft}
+          onDraftChange={handleNotesDraftChange}
+          onEdit={!isMobile ? openNotesPanel : undefined}
+        />
       </Container>
 
       {!isMobile && (

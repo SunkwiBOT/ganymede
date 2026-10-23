@@ -1,10 +1,12 @@
 "use client"
+import ArchiveStatusBadge from "./ArchiveStatusBadge";
+import { ArchiveStatus, isArchiveActive } from "@/app/util/archiveStatus";
 import { useGetVideoByExternalId, Video, VideoType } from "@/app/hooks/useVideos";
 import { escapeURL, formatBytes } from "@/app/util/util";
 import { Avatar, Box, Divider, Tooltip, Text, Group, Badge, Button, rem } from "@mantine/core";
 import { env } from "next-runtime-env";
 import classes from "./TitleBar.module.css";
-import { IconCalendarEvent, IconClock, IconDatabase, IconLock } from "@tabler/icons-react";
+import { IconCalendarEvent, IconClock, IconDatabase, IconLock, IconNotes } from "@tabler/icons-react";
 import dayjs from "dayjs";
 import VideoMenu from "./Menu";
 import useAuthStore from "@/app/store/useAuthStore";
@@ -15,12 +17,13 @@ import LiveElapsedTimer from "./LiveElapsedTimer";
 
 interface Params {
   video: Video;
+  onEditNotes?: () => void;
 }
 
-const VideoTitleBar = ({ video }: Params) => {
+const VideoTitleBar = ({ video, onEditNotes }: Params) => {
   const t = useTranslations("VideoComponents");
   const hasPermission = useAuthStore(state => state.hasPermission);
-  const isProcessingLive = video.processing && video.type === VideoType.Live;
+  const isProcessingLive = isArchiveActive(video.status) && video.type === VideoType.Live;
 
   const { data: clipFullVideo } = useGetVideoByExternalId(video.clip_ext_vod_id)
 
@@ -122,23 +125,26 @@ const VideoTitleBar = ({ video }: Params) => {
 
             <Group>
               <Tooltip label={t('videoTypeTooltip')} openDelay={250}>
-                {video.processing ? (
-                  <div className={classes.titleBarBadge}>
-                    <Badge color="red">
-                      {video.type} - {t('processingOverlayText')}
-                    </Badge>
-                  </div>
-                ) : (
-                  <div className={classes.titleBarBadge}>
-                    <Badge variant="default">
-                      {video.type}
-                    </Badge>
-                  </div>
-                )}
-
+                <Badge variant="default">{video.type}</Badge>
               </Tooltip>
+              {video.status !== ArchiveStatus.Completed && (
+                <ArchiveStatusBadge videoId={video.id} status={video.status} />
+              )}
             </Group>
           </div>
+
+          {onEditNotes && hasPermission(UserRole.Editor) && (
+            <Box mt={5} mr={5}>
+              <Button
+                variant="default"
+                size="xs"
+                leftSection={<IconNotes size={14} />}
+                onClick={onEditNotes}
+              >
+                {t("notesTitle")}
+              </Button>
+            </Box>
+          )}
 
           {hasPermission(UserRole.Archiver) && (
             <Box mt={5}>

@@ -378,7 +378,7 @@ func (s *Service) Check(ctx context.Context) error {
 	}
 
 	processingQueueItems, err := s.Store.Client.Queue.Query().
-		Where(entQueue.Processing(true)).
+		Where(entQueue.HasVodWith(entVod.StatusIn(utils.ActiveArchiveStatuses()...))).
 		WithVod().
 		All(ctx)
 	if err != nil {
@@ -436,7 +436,7 @@ OUTER:
 				if queueItem.Edges.Vod == nil {
 					continue
 				}
-				if queue.IsActiveLiveCaptureQueue(queueItem) &&
+				if queue.IsActiveLiveCaptureQueue(queueItem, queueItem.Edges.Vod.Status) &&
 					(queueItem.Edges.Vod.ExtStreamID == stream.ID || queueItem.Edges.Vod.ExtID == stream.ID) {
 					activeQueueItem = queueItem
 					break
@@ -540,6 +540,10 @@ OUTER:
 					ArchiveChat: lwc.ArchiveChat,
 					RenderChat:  lwc.RenderChat,
 				})
+				if errors.Is(err, archive.ErrActiveLiveArchive) {
+					log.Debug().Str("stream_id", stream.ID).Msg("stream already has an active archive")
+					continue OUTER
+				}
 				if err != nil {
 					log.Error().Err(err).Msg("error archiving twitch livestream")
 					continue

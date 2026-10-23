@@ -336,9 +336,6 @@ var (
 		{Name: "id", Type: field.TypeUUID},
 		{Name: "live_archive", Type: field.TypeBool, Default: false},
 		{Name: "on_hold", Type: field.TypeBool, Default: false},
-		{Name: "video_processing", Type: field.TypeBool, Default: true},
-		{Name: "chat_processing", Type: field.TypeBool, Default: true},
-		{Name: "processing", Type: field.TypeBool, Default: true},
 		{Name: "task_vod_create_folder", Type: field.TypeEnum, Nullable: true, Enums: []string{"success", "running", "pending", "failed"}, Default: "pending"},
 		{Name: "task_vod_download_thumbnail", Type: field.TypeEnum, Nullable: true, Enums: []string{"success", "running", "pending", "failed"}, Default: "pending"},
 		{Name: "task_vod_save_info", Type: field.TypeEnum, Nullable: true, Enums: []string{"success", "running", "pending", "failed"}, Default: "pending"},
@@ -366,7 +363,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "queues_vods_queue",
-				Columns:    []*schema.Column{QueuesColumns[23]},
+				Columns:    []*schema.Column{QueuesColumns[20]},
 				RefColumns: []*schema.Column{VodsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -437,7 +434,7 @@ var (
 		{Name: "duration", Type: field.TypeInt, Default: 1},
 		{Name: "clip_vod_offset", Type: field.TypeInt, Nullable: true},
 		{Name: "resolution", Type: field.TypeString, Nullable: true},
-		{Name: "processing", Type: field.TypeBool, Default: false},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"queued", "running", "finalizing", "completed", "failed"}, Default: "completed"},
 		{Name: "thumbnail_path", Type: field.TypeString, Nullable: true},
 		{Name: "web_thumbnail_path", Type: field.TypeString},
 		{Name: "video_path", Type: field.TypeString},
@@ -468,6 +465,7 @@ var (
 		{Name: "sprite_thumbnails_columns", Type: field.TypeInt, Nullable: true},
 		{Name: "storage_size_bytes", Type: field.TypeInt64, Default: 0},
 		{Name: "streamed_at", Type: field.TypeTime},
+		{Name: "video_start_at", Type: field.TypeTime, Nullable: true},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "channel_vods", Type: field.TypeUUID},
@@ -480,7 +478,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "vods_channels_vods",
-				Columns:    []*schema.Column{VodsColumns[43]},
+				Columns:    []*schema.Column{VodsColumns[44]},
 				RefColumns: []*schema.Column{ChannelsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

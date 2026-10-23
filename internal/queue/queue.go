@@ -2,20 +2,20 @@ package queue
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
-	"github.com/riverqueue/river"
-	"github.com/riverqueue/river/rivertype"
 	"github.com/rs/zerolog/log"
 	"github.com/zibbp/ganymede/ent"
 	"github.com/zibbp/ganymede/ent/queue"
+	entVod "github.com/zibbp/ganymede/ent/vod"
+	"github.com/zibbp/ganymede/internal/archivestatus"
 	"github.com/zibbp/ganymede/internal/channel"
 	"github.com/zibbp/ganymede/internal/config"
 	"github.com/zibbp/ganymede/internal/database"
-	"github.com/zibbp/ganymede/internal/tasks"
 	tasks_client "github.com/zibbp/ganymede/internal/tasks/client"
 	"github.com/zibbp/ganymede/internal/utils"
 	"github.com/zibbp/ganymede/internal/vod"
@@ -28,12 +28,6 @@ type Service struct {
 	RiverClient    *tasks_client.RiverClient
 }
 
-type StartQueueTaskInput struct {
-	QueueId  uuid.UUID
-	TaskName string
-	Continue bool
-}
-
 func NewService(store *database.Database, vodService *vod.Service, channelService *channel.Service, riverClient *tasks_client.RiverClient) *Service {
 	return &Service{Store: store, VodService: vodService, ChannelService: channelService, RiverClient: riverClient}
 }
@@ -42,9 +36,6 @@ type Queue struct {
 	ID                       uuid.UUID        `json:"id"`
 	LiveArchive              bool             `json:"live_archive"`
 	OnHold                   bool             `json:"on_hold"`
-	VideoProcessing          bool             `json:"video_processing"`
-	ChatProcessing           bool             `json:"chat_processing"`
-	Processing               bool             `json:"processing"`
 	TaskVodCreateFolder      utils.TaskStatus `json:"task_vod_create_folder"`
 	TaskVodDownloadThumbnail utils.TaskStatus `json:"task_vod_download_thumbnail"`
 	TaskVodSaveInfo          utils.TaskStatus `json:"task_vod_save_info"`
@@ -61,8 +52,10 @@ type Queue struct {
 	CreatedAt                time.Time        `json:"created_at"`
 }
 
-func IsActiveLiveCaptureQueue(q *ent.Queue) bool {
-	if q == nil || !q.LiveArchive || !q.Processing {
+// IsActiveLiveCaptureQueue reports whether q still owns a live capture. status
+// is the VOD archive status; a failed metadata task does not release the capture.
+func IsActiveLiveCaptureQueue(q *ent.Queue, status utils.ArchiveStatus) bool {
+	if q == nil || !q.LiveArchive || status == utils.ArchiveCompleted {
 		return false
 	}
 
@@ -103,8 +96,20 @@ func (s *Service) CreateQueueItemWithClient(ctx context.Context, client *ent.Cli
 
 }
 
-func (s *Service) UpdateQueueItem(queueDto Queue, qID uuid.UUID) (*ent.Queue, error) {
-	q, err := s.Store.Client.Queue.UpdateOneID(qID).SetLiveArchive(queueDto.LiveArchive).SetOnHold(queueDto.OnHold).SetVideoProcessing(queueDto.VideoProcessing).SetChatProcessing(queueDto.ChatProcessing).SetProcessing(queueDto.Processing).SetTaskVodCreateFolder(queueDto.TaskVodCreateFolder).SetTaskVodDownloadThumbnail(queueDto.TaskVodDownloadThumbnail).SetTaskVodSaveInfo(queueDto.TaskVodSaveInfo).SetTaskVideoDownload(queueDto.TaskVideoDownload).SetTaskVideoConvert(queueDto.TaskVideoConvert).SetTaskVideoMove(queueDto.TaskVideoMove).SetTaskChatDownload(queueDto.TaskChatDownload).SetTaskChatConvert(queueDto.TaskChatConvert).SetArchiveChat(queueDto.ArchiveChat).SetRenderChat(queueDto.RenderChat).SetTaskChatRender(queueDto.TaskChatRender).SetTaskChatMove(queueDto.TaskChatMove).Save(context.Background())
+func (s *Service) UpdateQueueItem(ctx context.Context, queueDto Queue, qID uuid.UUID) (*ent.Queue, error) {
+	var q *ent.Queue
+	err := s.Store.WithTx(ctx, func(client *ent.Client, _ *sql.Tx) error {
+		var err error
+		q, err = client.Queue.UpdateOneID(qID).SetLiveArchive(queueDto.LiveArchive).SetOnHold(queueDto.OnHold).SetTaskVodCreateFolder(queueDto.TaskVodCreateFolder).SetTaskVodDownloadThumbnail(queueDto.TaskVodDownloadThumbnail).SetTaskVodSaveInfo(queueDto.TaskVodSaveInfo).SetTaskVideoDownload(queueDto.TaskVideoDownload).SetTaskVideoConvert(queueDto.TaskVideoConvert).SetTaskVideoMove(queueDto.TaskVideoMove).SetTaskChatDownload(queueDto.TaskChatDownload).SetTaskChatConvert(queueDto.TaskChatConvert).SetTaskChatRender(queueDto.TaskChatRender).SetTaskChatMove(queueDto.TaskChatMove).Save(ctx)
+		if err != nil {
+			return err
+		}
+		v, err := q.QueryVod().Only(ctx)
+		if err != nil {
+			return err
+		}
+		return client.Vod.UpdateOneID(v.ID).SetStatus(archivestatus.FromQueue(q)).Exec(ctx)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error updating queue: %v", err)
 	}
@@ -120,8 +125,8 @@ func (s *Service) GetQueueItems(c echo.Context) ([]*ent.Queue, error) {
 	}
 	return q, nil
 }
-func (s *Service) GetQueueItemsFilter(c echo.Context, processing bool) ([]*ent.Queue, error) {
-	q, err := s.Store.Client.Queue.Query().Where(queue.Processing(processing)).WithVod(func(q *ent.VodQuery) {
+func (s *Service) GetQueueItemsFilter(c echo.Context, statuses []utils.ArchiveStatus) ([]*ent.Queue, error) {
+	q, err := s.Store.Client.Queue.Query().Where(queue.HasVodWith(entVod.StatusIn(statuses...))).WithVod(func(q *ent.VodQuery) {
 		q.WithChannel()
 	}).Order(ent.Asc(queue.FieldCreatedAt)).All(c.Request().Context())
 	if err != nil {
@@ -170,110 +175,19 @@ func (s *Service) ArchiveGetQueueItem(qID uuid.UUID) (*ent.Queue, error) {
 
 // StopQueueItem stops a queue item's tasks by canceling each job's context
 func (s *Service) StopQueueItem(ctx context.Context, id uuid.UUID) error {
+	q, err := s.Store.Client.Queue.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get queue item to stop: %w", err)
+	}
+	// A delayed or repeated stop must not cancel newly enqueued finalization jobs.
+	if q.LiveArchive && (q.TaskVideoDownload == utils.Running || q.TaskVideoDownload == utils.Success) {
+		return s.RiverClient.StopLiveRecording(ctx, id)
+	}
 
-	err := s.RiverClient.CancelJobsForQueueId(ctx, id)
+	err = s.RiverClient.CancelJobsForQueueId(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	return nil
-}
-
-func (s *Service) StartQueueTask(ctx context.Context, input StartQueueTaskInput) (*rivertype.JobRow, error) {
-
-	// ensure queue exists
-	_, err := s.GetQueueItem(input.QueueId)
-	if err != nil {
-		return nil, err
-	}
-
-	var task river.JobArgs
-
-	taskInput := tasks.ArchiveVideoInput{
-		QueueId: input.QueueId,
-	}
-
-	switch input.TaskName {
-	case "task_vod_create_folder":
-		task = tasks.CreateDirectoryArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_vod_download_thumbnail":
-		task = tasks.DownloadThumbnailArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_vod_save_info":
-		task = tasks.SaveVideoInfoArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_video_download":
-		task = tasks.DownloadVideoArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_video_convert":
-		task = tasks.PostProcessVideoArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_video_move":
-		task = tasks.MoveVideoArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_chat_download":
-		task = tasks.DownloadChatArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_chat_convert":
-		task = tasks.ConvertLiveChatArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_chat_render":
-		task = tasks.RenderChatArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_chat_move":
-		task = tasks.MoveChatArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_live_chat_download":
-		task = tasks.DownloadLiveChatArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	case "task_live_video_download":
-		task = tasks.DownloadLiveVideoArgs{
-			Continue: input.Continue,
-			Input:    taskInput,
-		}
-
-	default:
-		return nil, fmt.Errorf("unknown task: %s", input.TaskName)
-	}
-
-	job, err := s.RiverClient.Client.Insert(ctx, task, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return job.Job, err
 }

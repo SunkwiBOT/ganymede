@@ -1,13 +1,19 @@
-import '@vidstack/react/player/styles/default/theme.css';
-import '@vidstack/react/player/styles/default/layouts/video.css';
-import { MediaPlayer, MediaPlayerInstance, MediaProvider, MediaSrc, Poster, Track, VideoMimeType, useMediaState } from '@vidstack/react';
-import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
-import { Video, VideoType } from '@/app/hooks/useVideos';
+import { ArchiveStatus, isArchiveActive } from "@/app/util/archiveStatus";
+import { Video, VideoPlayer as VideoJsPlayer, usePlayer as useVodPlayer } from '@videojs/react/video';
+import { LiveVideoPlayer as LiveVideoJsPlayer, usePlayer as useLivePlayer } from '@videojs/react/live-video';
+import { HlsJsVideo } from '@videojs/react/media/hlsjs-video';
+import { I18nProvider } from '@videojs/react/i18n';
+import { VideoSkin } from '@/components/videojs/video/skin';
+import { LiveVideoSkin } from '@/components/videojs/live-video/skin';
+import { Video as VideoType, VideoType as GanymedeVideoType } from '@/app/hooks/useVideos';
 import classes from "./Player.module.css"
-import { RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { env } from 'next-runtime-env';
 import dayjs from 'dayjs';
+import { useLocale } from 'next-intl';
 import { escapeURL } from '@/app/util/util';
+import { extractVideoNoteTimestamps } from '@/app/util/videoNotes';
 import { PlaybackStatus, useFetchPlaybackForVideo, useSetPlaybackProgressForVideo, useUpdatePlaybackProgressForVideo } from '@/app/hooks/usePlayback';
 import { useAxiosPrivate } from '@/app/hooks/useAxios';
 import useAuthStore from '@/app/store/useAuthStore';
@@ -17,40 +23,18 @@ import VideoPlayerTheaterModeIcon from './PlayerTheaterModeIcon';
 import useSettingsStore from '@/app/store/useSettingsStore';
 import VideoPlayerHideChatIcon from './PlayerHideChatIcon';
 import VideoPlayerAbsoluteTimeIcon from './PlayerAbsoluteTimeIcon';
+import type { GanymedePlayerRef } from './ganymedePlayerRef';
 
 interface Params {
-  video: Video;
-  ref: RefObject<MediaPlayerInstance | null>;
+  video: VideoType;
+  ref: GanymedePlayerRef;
 }
 
-const LIVE_EDGE_FALLBACK_DELAY_SECONDS = 2;
-// The temporary live playlist uses two-second HLS segments. Keep the DVR
-// control enabled as soon as at least one segment is available.
-const LIVE_DVR_MIN_WINDOW_SECONDS = 2;
-
-const seekToProcessingLiveEdge = (player: MediaPlayerInstance): boolean => {
-  try {
-    player.seekToLiveEdge();
-    return true;
-  } catch {
-    // The player can throw if the provider is not ready yet; fall back below.
-  }
-
-  const seekableEnd = player.state.seekableEnd;
-  if (!Number.isFinite(seekableEnd) || seekableEnd <= 0) {
-    return false;
-  }
-
-  player.currentTime = Math.max(0, seekableEnd - LIVE_EDGE_FALLBACK_DELAY_SECONDS);
-  return true;
-};
-
-const AbsoluteTimeDisplay = ({ streamedAt }: { streamedAt: string | Date }) => {
-  const currentTime = useMediaState('currentTime');
+const AbsoluteTimeOverlay = ({ startedAt, currentTime }: { startedAt: string | Date; currentTime: number }) => {
   const flooredCurrentTime = Math.floor(currentTime);
   const absoluteTime = useMemo(
-    () => dayjs(streamedAt).add(flooredCurrentTime, 'second'),
-    [streamedAt, flooredCurrentTime],
+    () => dayjs(startedAt).add(flooredCurrentTime, 'second'),
+    [startedAt, flooredCurrentTime],
   );
 
   return (
@@ -60,34 +44,56 @@ const AbsoluteTimeDisplay = ({ streamedAt }: { streamedAt: string | Date }) => {
   );
 };
 
+// Preset `usePlayer` hooks are typed, but TS resolves the selector state as
+// `unknown` under the repo toolchain; narrow at the selection site.
+const AbsoluteTimeDisplay = ({ startedAt }: { startedAt: string | Date }) => {
+  const currentTime = useVodPlayer((s) => (s as unknown as { currentTime: number }).currentTime);
+  const safeCurrentTime = typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
+  return <AbsoluteTimeOverlay startedAt={startedAt} currentTime={safeCurrentTime} />;
+};
+
+const LiveAbsoluteTimeDisplay = ({ startedAt }: { startedAt: string | Date }) => {
+  const currentTime = useLivePlayer((s) => (s as unknown as { currentTime: number }).currentTime);
+  const safeCurrentTime = typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
+  return <AbsoluteTimeOverlay startedAt={startedAt} currentTime={safeCurrentTime} />;
+};
+
+const PlayerCustomControls = () => {
+  return (
+    <>
+      <VideoPlayerTheaterModeIcon />
+      <VideoPlayerAbsoluteTimeIcon />
+      <VideoPlayerHideChatIcon />
+    </>
+  );
+};
+
 const VideoPlayer = ({ video, ref }: Params) => {
   const searchParams = useSearchParams()
+  const locale = useLocale();
 
   const isLoggedIn = useAuthStore(state => state.isLoggedIn);
 
   const player = ref;
-  const [videoSource, setVideoSource] = useState<MediaSrc>();
-  const [videoPoster, setVideoPoster] = useState<string>("");
-
   const hasInitializedPlaybackTime = useRef(false);
-  const returnToLiveOnPlay = useRef(false);
+  const pendingResumeTime = useRef<number | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  const [playerVolume, setPlayerVolume] = useState(1);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const updatePlaybackProgressMutation = useUpdatePlaybackProgressForVideo()
   const setPlaybackProgressMutation = useSetPlaybackProgressForVideo()
 
   const videoTheaterMode = useSettingsStore((state) => state.videoTheaterMode);
   const showAbsoluteTime = useSettingsStore((state) => state.showAbsoluteTime);
+  // video_start_at is the wall-clock time of video second 0 for live
+  // archives, resolved to match the chat sync; falls back to created_at.
+  const startedAt = video.type === GanymedeVideoType.Live
+    ? (video.video_start_at || video.created_at)
+    : video.streamed_at;
   const autoplayVideo = useSettingsStore((state) => state.autoplayVideo);
-  const isProcessingLive = video.processing && video.type === VideoType.Live;
-  const urlStartTime = useMemo(() => {
-    const time = searchParams.get("t");
-    if (time === null) return null;
-
-    const parsedTime = parseInt(time, 10);
-    return Number.isFinite(parsedTime) ? parsedTime : null;
-  }, [searchParams]);
 
   const axiosPrivate = useAxiosPrivate();
   // get playback data
@@ -99,140 +105,164 @@ const VideoPlayer = ({ video, ref }: Params) => {
     enabled: (isLoggedIn)
   })
 
-  useEffect(() => {
-    if (!player) return
+  const isHls = isArchiveActive(video.status) || video.video_path.endsWith("m3u8");
 
-    const videoPath = video.video_path ?? "";
-    const videoExtension = videoPath.substring(videoPath.length - 4)
-    let videoType: VideoMimeType = "video/mp4"
-    if (videoExtension == "m3u8") {
-      videoType = "video/object";
+  const videoSrc = useMemo(() => {
+    // Allow for processing videos to be played via HLS from the temp directory if enabled
+    if (isArchiveActive(video.status)) {
+      return `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.tmp_video_hls_path)}/${video.ext_stream_id || video.ext_id}-video.m3u8`;
     }
+    return `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.video_path)}`;
+  }, [video.status, video.tmp_video_hls_path, video.ext_stream_id, video.ext_id, video.video_path]);
 
-    // Only processing live streams are watchable while archiving through the temporary HLS output.
-    if (isProcessingLive && video.tmp_video_hls_path) {
-      setVideoSource({
-        src: `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.tmp_video_hls_path)}/${video.ext_id}-video.m3u8`,
-        type: "application/x-mpegurl"
-      })
-    } else if (!video.processing && videoPath) {
-      setVideoSource({
-        src: `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(videoPath)}`,
-        type: videoType
-      })
-    } else {
-      setVideoSource(undefined);
-    }
-
+  const videoPoster = useMemo(() => {
     if (video.thumbnail_path) {
-      setVideoPoster(`${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.thumbnail_path)}`)
+      return `${(env('NEXT_PUBLIC_CDN_URL') ?? '')}${escapeURL(video.thumbnail_path)}`;
     }
+    return "";
+  }, [video.thumbnail_path]);
 
-    // todo: captions?
+  const chapterSrc = useMemo(() => {
+    if (video.status !== ArchiveStatus.Completed) return undefined;
+    return `${(env('NEXT_PUBLIC_API_URL') ?? '')}/api/v1/chapter/video/${video.id}/webvtt`;
+  }, [video.status, video.id]);
 
-    const localVolume = localStorage.getItem("ganymede-volume")
-    if (localVolume) {
-      setPlayerVolume(parseFloat(localVolume))
-    }
+  // thumbnails URL only when not processing
+  const thumbnailsSrc = useMemo(() => {
+    if (video.status !== ArchiveStatus.Completed) return undefined;
+    return `${(env('NEXT_PUBLIC_API_URL') ?? '')}/api/v1/vod/${video.id}/thumbnails/vtt`;
+  }, [video.status, video.id]);
 
-    const unsubscribe = player.current?.subscribe(({ volume }) => {
-      if (volume != 1) {
-        localStorage.setItem("ganymede-volume", volume.toString());
-      }
-    });
+  const noteBookmarks = useMemo(
+    () => extractVideoNoteTimestamps(video.notes, video.id),
+    [video.notes, video.id],
+  );
 
-    return unsubscribe;
-  }, [isProcessingLive, player, video])
-
+  // Resolve the resume target once server playback or ?t= is known.
   useEffect(() => {
-    const currentPlayer = player.current;
-    if (!currentPlayer || hasInitializedPlaybackTime.current) return;
-
-    if (!hasInitializedPlaybackTime.current) {
-      if (isProcessingLive) {
-        if (urlStartTime !== null) {
-          currentPlayer.currentTime = urlStartTime;
-          hasInitializedPlaybackTime.current = true;
-          return;
+    if (hasInitializedPlaybackTime.current) return;
+    if (pendingResumeTime.current !== null) return;
+    if (playbackData && playbackData.time != null) {
+      // Resume from server-side playback progress.
+      pendingResumeTime.current = playbackData.time;
+    } else {
+      // Check if time is set in the url
+      const time = searchParams.get("t");
+      if (time !== null) {
+        const parsed = parseInt(time, 10);
+        if (Number.isFinite(parsed)) {
+          pendingResumeTime.current = parsed;
         }
-
-        if (currentPlayer.state.canPlay) {
-          hasInitializedPlaybackTime.current = seekToProcessingLiveEdge(currentPlayer);
-        }
-
-        if (hasInitializedPlaybackTime.current) return;
-
-        const unsubscribe = currentPlayer.subscribe(({ canPlay, seekableEnd }) => {
-          if (hasInitializedPlaybackTime.current || !canPlay) return;
-          if (!Number.isFinite(seekableEnd) || seekableEnd <= 0) return;
-
-          hasInitializedPlaybackTime.current = seekToProcessingLiveEdge(currentPlayer);
-        });
-
-        return unsubscribe;
-      }
-
-      if (playbackData && playbackData.time != null) {
-        // Resume from server-side playback progress.
-        currentPlayer.currentTime = playbackData.time
-        hasInitializedPlaybackTime.current = true
-      } else if (urlStartTime !== null) {
-        currentPlayer.currentTime = urlStartTime;
-        hasInitializedPlaybackTime.current = true
       }
     }
-  }, [isProcessingLive, playbackData, player, urlStartTime])
+  }, [playbackData, searchParams]);
 
+  const applyPendingResume = useCallback(() => {
+    const el = player.current;
+    if (!el) return;
+    if (hasInitializedPlaybackTime.current) return;
+    if (pendingResumeTime.current === null) return;
+    try {
+      el.currentTime = pendingResumeTime.current;
+    } catch {
+      return;
+    }
+    hasInitializedPlaybackTime.current = true;
+  }, [player]);
+
+  const applyStoredVolume = useCallback(() => {
+    const el = player.current;
+    if (!el) return;
+    try {
+      const localVolume = localStorage.getItem("ganymede-volume");
+      if (localVolume !== null) {
+        const parsed = parseFloat(localVolume);
+        if (Number.isFinite(parsed)) {
+          el.volume = Math.min(1, Math.max(0, parsed));
+        }
+      }
+    } catch {
+      // localStorage may be unavailable; keep element default.
+    }
+  }, [player]);
+
+  const handleVolumeChange = useCallback(() => {
+    const el = player.current;
+    if (!el) return;
+    const volume = el.volume;
+    if (volume !== 1) {
+      try {
+        localStorage.setItem("ganymede-volume", volume.toString());
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+  }, [player]);
+
+  const handleMediaReady = useCallback(() => {
+    applyStoredVolume();
+    applyPendingResume();
+  }, [applyStoredVolume, applyPendingResume]);
+
+  // Retry resume once the element exists and the target is known.
+  useEffect(() => {
+    if (!mounted) return;
+    if (hasInitializedPlaybackTime.current) return;
+    if (pendingResumeTime.current === null) return;
+    applyPendingResume();
+  }, [mounted, playbackData, videoSrc, applyPendingResume]);
+
+
+  // Read the current video and mutation callbacks without restarting the timer on every render.
+  const reportPlaybackProgress = useRef<(() => boolean) | null>(null);
+  useEffect(() => {
+    reportPlaybackProgress.current = () => {
+      if (!player.current || player.current.paused) return false;
+      const playerTimeInt = Math.floor(player.current.currentTime);
+      if (playerTimeInt === 0) return false;
+
+      updatePlaybackProgressMutation.mutate({
+        axiosPrivate,
+        videoId: video.id,
+        time: playerTimeInt,
+      });
+
+      if (video.status === ArchiveStatus.Completed && playerTimeInt / video.duration >= 0.98) {
+        setPlaybackProgressMutation.mutate({
+          axiosPrivate,
+          videoId: video.id,
+          status: PlaybackStatus.Finished,
+        });
+        return true;
+      }
+      return false;
+    };
+  }, [player, video, axiosPrivate, updatePlaybackProgressMutation, setPlaybackProgressMutation]);
 
   // Playback progress reporting
   useEffect(() => {
     if (!isLoggedIn) return;
-    const playbackInerval = setInterval(async () => {
-      if (player.current == null) return;
-      if (player.current.paused) return;
-
-      const playerTimeInt = Math.floor(player.current.currentTime)
-      if (playerTimeInt == 0) return;
-
-
-      updatePlaybackProgressMutation.mutate({
-        axiosPrivate: axiosPrivate,
-        videoId: video.id,
-        time: playerTimeInt
-      })
-
-      // mark video as finished if over duration threshold
-      if (!video.processing && (playerTimeInt / video.duration >= 0.98)) {
-        setPlaybackProgressMutation.mutate({
-          axiosPrivate: axiosPrivate,
-          videoId: video.id,
-          status: PlaybackStatus.Finished
-        })
-
-        // remove interval
-        clearInterval(playbackInerval)
-      }
+    const playbackInterval = setInterval(() => {
+      if (reportPlaybackProgress.current?.()) clearInterval(playbackInterval);
     }, 10000);
-    return () => clearInterval(playbackInerval);
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => clearInterval(playbackInterval);
+  }, [isLoggedIn, video.id, video.status]);
 
   // Fast tick for chat player - set player information in bus
   useEffect(() => {
     const ticketInterval = setInterval(() => {
       if (player.current == null) return;
 
-      let time = player.current.state.currentTime
+      let time = player.current.currentTime
       // Clip chats are offset with the position of the clip in the VOD
       // Append the offset to the current player time to account for this
-      if (video.type == VideoType.Clip && video.clip_vod_offset) {
+      if (video.type == GanymedeVideoType.Clip && video.clip_vod_offset) {
         time = time + video.clip_vod_offset
       };
 
       VideoEventBus.setData({
-        isPaused: player.current.state.paused,
-        isPlaying: player.current.state.playing,
+        isPaused: player.current.paused,
+        isPlaying: !player.current.paused,
         time: time
       })
     }, 100);
@@ -241,66 +271,95 @@ const VideoPlayer = ({ video, ref }: Params) => {
     };
   }, [player, video.clip_vod_offset, video.type]);
 
-  // thumbnails URL only when not processing
-  const thumbnails = !video.processing
-    ? `${(env('NEXT_PUBLIC_API_URL') ?? '')}/api/v1/vod/${video.id}/thumbnails/vtt`
-    : undefined
-  return (
-    <MediaPlayer
-      ref={player}
-      className={
-        videoTheaterMode
-          ? classes.mediaPlayerTheaterMode
-          : classes.mediaPlayer
-      }
-      src={videoSource}
-      aspect-ratio={16 / 9}
-      crossOrigin={true}
-      playsInline={true}
-      load="eager"
-      posterLoad="eager"
-      volume={playerVolume}
-      autoPlay={autoplayVideo}
-      onPause={() => {
-        if (isProcessingLive) {
-          returnToLiveOnPlay.current = true;
+  const skinStyle = {
+    '--media-accent-color': 'var(--mantine-color-violet-6)',
+    '--media-object-fit': 'contain',
+    '--media-border-radius': '0',
+    '--media-video-border-radius': '0',
+  } as CSSProperties;
+
+  // Avoid SSR mismatch: Video.js media engines need the browser.
+  if (!mounted) {
+    return (
+      <div
+        className={
+          videoTheaterMode
+            ? classes.mediaPlayerTheaterMode
+            : classes.mediaPlayer
         }
-      }}
-      onPlay={() => {
-        if (isProcessingLive && returnToLiveOnPlay.current && player.current) {
-          seekToProcessingLiveEdge(player.current);
-          returnToLiveOnPlay.current = false;
-        }
-      }}
-      // Vidstack otherwise infers a non-seekable live stream from the
-      // short-target-duration EVENT playlist used while archiving.
-      streamType={isProcessingLive ? "live:dvr" : "unknown"}
-      minLiveDVRWindow={LIVE_DVR_MIN_WINDOW_SECONDS}
-    >
-      {showAbsoluteTime && <AbsoluteTimeDisplay streamedAt={video.streamed_at} />}
-      <MediaProvider>
-        <Poster className={`${classes.mediaPlayerPoster} vds-poster`} src={videoPoster} alt={video.title} />
-        {!video.processing && (
-          <Track
-            src={`${(env('NEXT_PUBLIC_API_URL') ?? '')}/api/v1/chapter/video/${video.id}/webvtt`}
-            kind="chapters"
-            default={true}
-          />
-        )}
-      </MediaProvider>
-      <DefaultVideoLayout icons={defaultLayoutIcons} noScrubGesture={false}
-        slots={{
-          beforeFullscreenButton: <VideoPlayerTheaterModeIcon />,
-          afterFullscreenButton: (
-            <>
-              <VideoPlayerAbsoluteTimeIcon />
-              <VideoPlayerHideChatIcon />
-            </>
-          )
-        }}
-        thumbnails={thumbnails}
       />
-    </MediaPlayer>
+    );
+  }
+
+  const mediaProps = {
+    ref: player,
+    src: videoSrc,
+    crossOrigin: "anonymous" as const,
+    playsInline: true,
+    autoPlay: autoplayVideo,
+    preload: "auto" as const,
+    onLoadedMetadata: handleMediaReady,
+    onCanPlay: handleMediaReady,
+    onVolumeChange: handleVolumeChange,
+  };
+
+  return (
+    <div className={classes.playerWrapper}>
+      {isArchiveActive(video.status) ? (
+        <LiveVideoJsPlayer title={video.title} poster={videoPoster}>
+          <I18nProvider locale={locale}>
+            <LiveVideoSkin
+              className={
+                videoTheaterMode
+                  ? classes.mediaPlayerTheaterMode
+                  : classes.mediaPlayer
+              }
+              style={skinStyle}
+              customControls={<PlayerCustomControls />}
+            >
+              <HlsJsVideo {...mediaProps} />
+              {showAbsoluteTime && <LiveAbsoluteTimeDisplay startedAt={startedAt} />}
+            </LiveVideoSkin>
+          </I18nProvider>
+        </LiveVideoJsPlayer>
+      ) : (
+        <VideoJsPlayer title={video.title} poster={videoPoster}>
+          <I18nProvider locale={locale}>
+            <VideoSkin
+              className={
+                videoTheaterMode
+                  ? classes.mediaPlayerTheaterMode
+                  : classes.mediaPlayer
+              }
+              style={skinStyle}
+              bookmarks={noteBookmarks}
+              customControls={<PlayerCustomControls />}
+            >
+              {isHls ? (
+                <HlsJsVideo {...mediaProps}>
+                  {chapterSrc && (
+                    <track kind="chapters" src={chapterSrc} default />
+                  )}
+                  {thumbnailsSrc && (
+                    <track kind="metadata" label="thumbnails" src={thumbnailsSrc} default />
+                  )}
+                </HlsJsVideo>
+              ) : (
+                <Video {...mediaProps}>
+                  {chapterSrc && (
+                    <track kind="chapters" src={chapterSrc} default />
+                  )}
+                  {thumbnailsSrc && (
+                    <track kind="metadata" label="thumbnails" src={thumbnailsSrc} default />
+                  )}
+                </Video>
+              )}
+              {showAbsoluteTime && <AbsoluteTimeDisplay startedAt={startedAt} />}
+            </VideoSkin>
+          </I18nProvider>
+        </VideoJsPlayer>
+      )}
+    </div>
   );
 }
 

@@ -1,6 +1,7 @@
 package tasks
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,18 @@ import (
 	"github.com/riverqueue/river/rivertype"
 	"github.com/zibbp/ganymede/ent"
 )
+
+func TestMoveArchiveFileAcceptsAlreadyPublishedDestination(t *testing.T) {
+	dir := t.TempDir()
+	destination := filepath.Join(dir, "published.mp4")
+	if err := os.WriteFile(destination, []byte("media"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := moveArchiveFile(context.Background(), filepath.Join(dir, "missing.tmp"), destination, "video"); err != nil {
+		t.Fatalf("expected an already-published move to succeed: %v", err)
+	}
+}
 
 func TestValidateNonEmptyFile(t *testing.T) {
 	t.Run("missing file", func(t *testing.T) {
@@ -146,99 +159,23 @@ func TestIsLiveArchiveJobStale(t *testing.T) {
 	}
 }
 
-func TestValidateRecoverableLiveVideoInput(t *testing.T) {
-	t.Run("missing input is not recoverable", func(t *testing.T) {
-		dir := t.TempDir()
-		video := &ent.Vod{
-			TmpVideoDownloadPath: filepath.Join(dir, "missing.ts"),
-		}
+func TestLiveHlsCaptureSurvivesStreamVideoIDUpdate(t *testing.T) {
+	t.Parallel()
 
-		if err := validateRecoverableLiveVideoInput(video); err == nil {
-			t.Fatal("expected error for missing live video input")
-		}
-	})
+	const streamID = "stream123"
+	const vodID = "vod999"
+	tmpHlsPath := filepath.Join(t.TempDir(), streamID+"_uuid-video_hls0")
+	video := ent.Vod{
+		ExtID:                vodID,
+		ExtStreamID:          streamID,
+		TmpVideoHlsPath:      tmpHlsPath,
+		TmpVideoDownloadPath: filepath.Join(tmpHlsPath, streamID+"-video.m3u8"),
+	}
 
-	t.Run("non-empty transport stream is recoverable", func(t *testing.T) {
-		dir := t.TempDir()
-		tsPath := filepath.Join(dir, "video.ts")
-		if err := os.WriteFile(tsPath, []byte("ts-data"), 0o644); err != nil {
-			t.Fatalf("failed to create ts file: %v", err)
-		}
-		video := &ent.Vod{
-			TmpVideoDownloadPath: tsPath,
-		}
-
-		if err := validateRecoverableLiveVideoInput(video); err != nil {
-			t.Fatalf("expected recoverable ts input, got: %v", err)
-		}
-	})
-
-	t.Run("non-empty converted mp4 is recoverable without source ts", func(t *testing.T) {
-		dir := t.TempDir()
-		mp4Path := filepath.Join(dir, "video.mp4")
-		if err := os.WriteFile(mp4Path, []byte("mp4-data"), 0o644); err != nil {
-			t.Fatalf("failed to create mp4 file: %v", err)
-		}
-		video := &ent.Vod{
-			TmpVideoDownloadPath: filepath.Join(dir, "missing.ts"),
-			TmpVideoConvertPath:  mp4Path,
-		}
-
-		if err := validateRecoverableLiveVideoInput(video); err != nil {
-			t.Fatalf("expected recoverable converted input, got: %v", err)
-		}
-	})
-
-	t.Run("empty converted mp4 with source ts is recoverable for retry", func(t *testing.T) {
-		dir := t.TempDir()
-		tsPath := filepath.Join(dir, "video.ts")
-		mp4Path := filepath.Join(dir, "video.mp4")
-		if err := os.WriteFile(tsPath, []byte("ts-data"), 0o644); err != nil {
-			t.Fatalf("failed to create ts file: %v", err)
-		}
-		if err := os.WriteFile(mp4Path, []byte{}, 0o644); err != nil {
-			t.Fatalf("failed to create empty mp4 file: %v", err)
-		}
-		video := &ent.Vod{
-			TmpVideoDownloadPath: tsPath,
-			TmpVideoConvertPath:  mp4Path,
-		}
-
-		if err := validateRecoverableLiveVideoInput(video); err != nil {
-			t.Fatalf("expected source ts to make retry recoverable, got: %v", err)
-		}
-	})
-
-	t.Run("empty converted mp4 without source ts is not recoverable", func(t *testing.T) {
-		dir := t.TempDir()
-		mp4Path := filepath.Join(dir, "video.mp4")
-		if err := os.WriteFile(mp4Path, []byte{}, 0o644); err != nil {
-			t.Fatalf("failed to create empty mp4 file: %v", err)
-		}
-		video := &ent.Vod{
-			TmpVideoDownloadPath: filepath.Join(dir, "missing.ts"),
-			TmpVideoConvertPath:  mp4Path,
-		}
-
-		if err := validateRecoverableLiveVideoInput(video); err == nil {
-			t.Fatal("expected error for empty converted input without source ts")
-		}
-	})
-
-	t.Run("non-empty hls playlist is recoverable", func(t *testing.T) {
-		dir := t.TempDir()
-		playlistPath := filepath.Join(dir, "123-video.m3u8")
-		if err := os.WriteFile(playlistPath, []byte("#EXTM3U\n"), 0o644); err != nil {
-			t.Fatalf("failed to create hls playlist: %v", err)
-		}
-		video := &ent.Vod{
-			ExtID:           "123",
-			VideoHlsPath:    filepath.Join(dir, "final-hls"),
-			TmpVideoHlsPath: dir,
-		}
-
-		if err := validateRecoverableLiveVideoInput(video); err != nil {
-			t.Fatalf("expected recoverable hls playlist, got: %v", err)
-		}
-	})
+	if got := liveCaptureID(&video); got != streamID {
+		t.Fatalf("liveCaptureID = %q, want %q", got, streamID)
+	}
+	if got := liveHlsPlaylistPath(&video); got != video.TmpVideoDownloadPath {
+		t.Fatalf("liveHlsPlaylistPath = %q, want %q", got, video.TmpVideoDownloadPath)
+	}
 }
