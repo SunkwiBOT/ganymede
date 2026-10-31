@@ -126,8 +126,11 @@ func NewHandler(database *database.Database, authService AuthService, channelSer
 		},
 	}))
 
-	// Use sessions
-	h.Server.Use(session.LoadAndSave(sessionManager))
+	// Use sessions only where they are read; each load is a Postgres query.
+	h.Server.Use(session.LoadAndSaveWithConfig(session.Config{
+		SessionManager: sessionManager,
+		Skipper:        newSessionSkipper(envConfig),
+	}))
 
 	// Middleware
 	h.Server.Validator = &utils.CustomValidator{Validator: validator.New()}
@@ -168,6 +171,34 @@ func NewHandler(database *database.Database, authService AuthService, channelSer
 	h.mapRoutes()
 
 	return h
+}
+
+// sessionSkipper skips the session store for routes that never read a session.
+// Session readers must live under /api/ or /riverui; scs panics on a skipped route.
+func sessionSkipper(c echo.Context) bool {
+	p := c.Request().URL.Path
+	return !strings.HasPrefix(p, "/api/") && p != "/riverui" && !strings.HasPrefix(p, "/riverui/")
+}
+
+// newSessionSkipper also loads sessions for the media directories that
+// RequireLoginMiddleware guards when REQUIRE_LOGIN is enabled.
+func newSessionSkipper(env config.EnvConfig) middleware.Skipper {
+	if !env.RequireLogin {
+		return sessionSkipper
+	}
+	mediaPrefixes := []string{
+		strings.TrimSuffix(env.VideosDir, "/") + "/",
+		strings.TrimSuffix(env.TempDir, "/") + "/",
+	}
+	return func(c echo.Context) bool {
+		p := c.Request().URL.Path
+		for _, prefix := range mediaPrefixes {
+			if strings.HasPrefix(p, prefix) {
+				return false
+			}
+		}
+		return sessionSkipper(c)
+	}
 }
 
 func (h *Handler) mapRoutes() {

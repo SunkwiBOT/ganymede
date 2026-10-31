@@ -5,13 +5,15 @@ import { HlsJsVideo } from '@videojs/react/media/hlsjs-video';
 import { I18nProvider } from '@videojs/react/i18n';
 import { VideoSkin } from '@/components/videojs/video/skin';
 import { LiveVideoSkin } from '@/components/videojs/live-video/skin';
-import { Video as VideoType, VideoType as GanymedeVideoType } from '@/app/hooks/useVideos';
+import { Platform, Video as VideoType, VideoType as GanymedeVideoType } from '@/app/hooks/useVideos';
 import classes from "./Player.module.css"
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { env } from 'next-runtime-env';
 import dayjs from 'dayjs';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { ActionIcon, FloatingWindow } from '@mantine/core';
+import { IconPin, IconPinnedOff } from '@tabler/icons-react';
 import { escapeURL } from '@/app/util/util';
 import { extractVideoNoteTimestamps } from '@/app/util/videoNotes';
 import { PlaybackStatus, useFetchPlaybackForVideo, useSetPlaybackProgressForVideo, useUpdatePlaybackProgressForVideo } from '@/app/hooks/usePlayback';
@@ -30,7 +32,34 @@ interface Params {
   ref: GanymedePlayerRef;
 }
 
-const AbsoluteTimeOverlay = ({ startedAt, currentTime }: { startedAt: string | Date; currentTime: number }) => {
+const AbsoluteTimePopup = ({ startedAt, currentTime }: { startedAt: string | Date; currentTime: number }) => {
+  const t = useTranslations('VideoComponents');
+  const pinnedPosition = useSettingsStore((state) => state.absoluteTimePinnedPosition);
+  const setPinnedPosition = useSettingsStore((state) => state.setAbsoluteTimePinnedPosition);
+  const pinned = pinnedPosition !== null;
+  // Keep the initial position stable so pinning/unpinning does not move the popup.
+  const [initialPosition] = useState(() => pinnedPosition ?? { top: 80, left: 16 });
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  const togglePinned = () => {
+    if (pinned) {
+      setPinnedPosition(null);
+    } else if (popupRef.current) {
+      const { top, left } = popupRef.current.getBoundingClientRect();
+      setPinnedPosition({ top, left });
+    }
+  };
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | undefined>(undefined);
+
+  useEffect(() => {
+    const updatePortalTarget = () => {
+      setPortalTarget(document.fullscreenElement as HTMLElement | null ?? undefined);
+    };
+    updatePortalTarget();
+    document.addEventListener('fullscreenchange', updatePortalTarget);
+    return () => document.removeEventListener('fullscreenchange', updatePortalTarget);
+  }, []);
+
   const flooredCurrentTime = Math.floor(currentTime);
   const absoluteTime = useMemo(
     () => dayjs(startedAt).add(flooredCurrentTime, 'second'),
@@ -38,9 +67,37 @@ const AbsoluteTimeOverlay = ({ startedAt, currentTime }: { startedAt: string | D
   );
 
   return (
-    <div className={classes.absoluteTimeOverlay}>
+    <FloatingWindow
+      ref={popupRef}
+      radius="sm"
+      py={4}
+      px={8}
+      bg={pinned ? 'transparent' : 'rgba(0, 0, 0, 0.7)'}
+      c="white"
+      enabled={!pinned}
+      excludeDragHandleSelector="button"
+      initialPosition={initialPosition}
+      constrainToViewport
+      className={classes.absoluteTimePopup}
+      data-pinned={pinned || undefined}
+      portalProps={{ target: portalTarget }}
+      role="dialog"
+      aria-label={t('absoluteTime')}
+    >
       <span className={classes.absoluteTimeText}>{absoluteTime.format('YYYY-MM-DD HH:mm:ss')}</span>
-    </div>
+      <ActionIcon
+        className={classes.absoluteTimePin}
+        variant="subtle"
+        color="gray"
+        size="sm"
+        aria-label={t(pinned ? 'unpinAbsoluteTime' : 'pinAbsoluteTime')}
+        title={t(pinned ? 'unpinAbsoluteTime' : 'pinAbsoluteTime')}
+        aria-pressed={pinned}
+        onClick={togglePinned}
+      >
+        {pinned ? <IconPinnedOff size={16} /> : <IconPin size={16} />}
+      </ActionIcon>
+    </FloatingWindow>
   );
 };
 
@@ -49,21 +106,21 @@ const AbsoluteTimeOverlay = ({ startedAt, currentTime }: { startedAt: string | D
 const AbsoluteTimeDisplay = ({ startedAt }: { startedAt: string | Date }) => {
   const currentTime = useVodPlayer((s) => (s as unknown as { currentTime: number }).currentTime);
   const safeCurrentTime = typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
-  return <AbsoluteTimeOverlay startedAt={startedAt} currentTime={safeCurrentTime} />;
+  return <AbsoluteTimePopup startedAt={startedAt} currentTime={safeCurrentTime} />;
 };
 
 const LiveAbsoluteTimeDisplay = ({ startedAt }: { startedAt: string | Date }) => {
   const currentTime = useLivePlayer((s) => (s as unknown as { currentTime: number }).currentTime);
   const safeCurrentTime = typeof currentTime === 'number' && Number.isFinite(currentTime) ? currentTime : 0;
-  return <AbsoluteTimeOverlay startedAt={startedAt} currentTime={safeCurrentTime} />;
+  return <AbsoluteTimePopup startedAt={startedAt} currentTime={safeCurrentTime} />;
 };
 
-const PlayerCustomControls = () => {
+const PlayerCustomControls = ({ showChatControl }: { showChatControl: boolean }) => {
   return (
     <>
       <VideoPlayerTheaterModeIcon />
       <VideoPlayerAbsoluteTimeIcon />
-      <VideoPlayerHideChatIcon />
+      {showChatControl && <VideoPlayerHideChatIcon />}
     </>
   );
 };
@@ -315,11 +372,12 @@ const VideoPlayer = ({ video, ref }: Params) => {
                   : classes.mediaPlayer
               }
               style={skinStyle}
-              customControls={<PlayerCustomControls />}
+              // The video page embeds Twitch live chat during active Twitch live archives.
+              customControls={<PlayerCustomControls showChatControl={video.type === GanymedeVideoType.Live && video.platform === Platform.Twitch && !!video.edges?.channel?.name} />}
             >
               <HlsJsVideo {...mediaProps} />
-              {showAbsoluteTime && <LiveAbsoluteTimeDisplay startedAt={startedAt} />}
             </LiveVideoSkin>
+            {showAbsoluteTime && <LiveAbsoluteTimeDisplay startedAt={startedAt} />}
           </I18nProvider>
         </LiveVideoJsPlayer>
       ) : (
@@ -333,7 +391,7 @@ const VideoPlayer = ({ video, ref }: Params) => {
               }
               style={skinStyle}
               bookmarks={noteBookmarks}
-              customControls={<PlayerCustomControls />}
+              customControls={<PlayerCustomControls showChatControl={video.status === ArchiveStatus.Completed && !!video.chat_path} />}
             >
               {isHls ? (
                 <HlsJsVideo {...mediaProps}>
@@ -354,8 +412,8 @@ const VideoPlayer = ({ video, ref }: Params) => {
                   )}
                 </Video>
               )}
-              {showAbsoluteTime && <AbsoluteTimeDisplay startedAt={startedAt} />}
             </VideoSkin>
+            {showAbsoluteTime && <AbsoluteTimeDisplay startedAt={startedAt} />}
           </I18nProvider>
         </VideoJsPlayer>
       )}
