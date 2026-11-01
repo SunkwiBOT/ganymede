@@ -13,6 +13,21 @@
 
 ---
 
+## Fork Differences
+
+This fork of [Zibbp/ganymede](https://github.com/Zibbp/ganymede) follows upstream releases and adds the following changes:
+
+- **Direct Twitch CDN VOD downloads**: VODs are downloaded with FFmpeg straight from Twitch's CDN HLS playlists, without a Twitch playback token and without yt-dlp. This also downloads streamers' subscriber-only VODs without being subscribed to the channel. Segments Twitch muted are downloaded from their muted copy instead of failing the archive, so those parts stay silent. The production image no longer ships yt-dlp.
+- **Required login enforced by the backend**: with `REQUIRE_LOGIN=true`, the server itself rejects anonymous access instead of the frontend just hiding pages. Video API data requires a logged-in session or an API key with read scope, and media files (`VIDEOS_DIR` and `TEMP_DIR`) require a logged-in session.
+- **Temporary live playback**: the "Watch a Live Stream" page plays a Twitch channel's live stream through Ganymede without creating a recording.
+- **Embedded Twitch live chat**: while a Twitch live archive is in progress, its video page shows the channel's live chat.
+- **Live-ended notifications**: a notification trigger and template for when a channel's live stream ends.
+- **Live archive recovery**: live recording starts before metadata tasks finish, missing or interrupted live archive queues are recovered, a channel still marked live without an active archive gets a new one, and failed live archives without any captured media are cleaned up.
+- **No view counters**: source and local view counts are removed from videos, sorting, and statistics.
+- **Hide "Continue Watching"**: a profile setting hides the Continue Watching section on the home page.
+
+Images are published to `ghcr.io/sunkwibot/ganymede`.
+
 ## Screenshot
 
 ![ganymede-readme_landing](https://github.com/user-attachments/assets/b1c024f5-f5ad-4611-84db-42d599364a74)
